@@ -27,6 +27,7 @@ startBtn.addEventListener("click", async () => {
     playSound("uiclick");
 
     document.getElementById("setup").classList.add("hidden");
+    document.querySelector("h1").classList.add("hidden");
     document.getElementById("arena").classList.remove("hidden");
     document.getElementById("p1-name").textContent = `${data1.name} (${data1.hoodieType})`;
     document.getElementById("p2-name").textContent = `${data2.name} (${data2.hoodieType})`;
