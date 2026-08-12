@@ -53,8 +53,9 @@ export function createAIController(self, opponent) {
         return;
       }
       input[towardOpponent] = true;
-      // Rarely jump in from further out instead of always walking.
-      if (dist > ENGAGE_RANGE * 2 && self.power >= 15 && Math.random() < 0.15) {
+      // Rarely jump in from further out instead of always walking - jump is
+      // free now, no power gate needed.
+      if (dist > ENGAGE_RANGE * 2 && Math.random() < 0.15) {
         input.jump = true;
       }
       return;

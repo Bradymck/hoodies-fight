@@ -17,7 +17,6 @@ const SPECIAL = { duration: 42, release: 30, damage: 25, cost: 50 };
 const HITSTUN_FRAMES = 24;
 const JUMP_DURATION = 36;
 const JUMP_HEIGHT = 55;
-const JUMP_COST = 8;
 const PUNCH_POWER_GAIN = 12;
 const PASSIVE_REGEN_PER_FRAME = 0.15; // ~9/sec at 60fps
 
@@ -85,9 +84,10 @@ export class Fighter {
 
     this.stateT++;
 
-    // Power slowly refills on its own except while jumping or kicking -
-    // those are the two moves that spend it, so no free regen mid-spend.
-    if (this.state !== "jump" && this.state !== "kick") {
+    // Power slowly refills on its own except while kicking - jump is free
+    // (it's the dodge tool, including for the ranged special, so it can't be
+    // gated behind a resource you might not have when you need to dodge).
+    if (this.state !== "kick") {
       this.power = Math.min(MAX_POWER, this.power + PASSIVE_REGEN_PER_FRAME);
     }
 
@@ -136,8 +136,7 @@ export class Fighter {
       this.lastEvent = "special-start";
       return;
     }
-    if (input.jump && this.power >= JUMP_COST) {
-      this.spendPower(JUMP_COST);
+    if (input.jump) {
       this.setState("jump");
       this.lastEvent = "jump-start";
       return;
