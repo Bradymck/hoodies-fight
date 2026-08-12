@@ -40,10 +40,15 @@ export async function loadFighterData(tokenId) {
     fetchHoodTalk(tokenId),
   ]);
   const imageUrl = await fetchTransparentHeadDataUri(token.image.svg);
+  const { hoodie, dress, mouth, top, eyes } = token.traits;
+  const rareTraitCount = [dress, mouth, top, eyes].filter(
+    (t) => t?.tier === "Rare",
+  ).length;
   return {
     tokenId,
     name: token.token.name,
-    hoodieType: token.traits.hoodie,
+    hoodieType: hoodie,
+    rareTraitCount,
     imageUrl,
     taunt: talk,
   };

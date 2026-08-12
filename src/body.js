@@ -1,17 +1,27 @@
-const FRAME_SIZE = 86;
 const GROUND_Y = 300;
 const HEAD_SIZE = 30;
-const HEAD_ANCHOR_X = 40;
-const HEAD_ANCHOR_Y = 10;
 
 const SHEETS = {
-  idle: loadImg("assets/sprites/idle.png"),
-  walk: loadImg("assets/sprites/walk.png"),
-  attack: loadImg("assets/sprites/attack.png"),
-  kick: loadImg("assets/sprites/kick.png"),
-  jump: loadImg("assets/sprites/jump.png"),
-  hurt: loadImg("assets/sprites/hurt.png"),
-  death: loadImg("assets/sprites/death.png"),
+  idle: { img: loadImg("assets/sprites/idle.png"), frameSize: 78 },
+  walk: { img: loadImg("assets/sprites/walk.png"), frameSize: 86 },
+  attack: { img: loadImg("assets/sprites/attack.png"), frameSize: 86 },
+  kick: { img: loadImg("assets/sprites/kick.png"), frameSize: 86 },
+  jump: { img: loadImg("assets/sprites/jump.png"), frameSize: 86 },
+  hurt: { img: loadImg("assets/sprites/hurt.png"), frameSize: 78 },
+  death: { img: loadImg("assets/sprites/death.png"), frameSize: 86 },
+};
+
+// Per-frame neck/collar anchor points, sampled directly from each sheet's
+// pixel bounding box (topmost opaque row, x-center of its first ~6 rows).
+// This is what makes the head actually follow the body's lean/recoil
+// instead of sitting pinned at one fixed point regardless of animation.
+const HEAD_ANCHORS = {
+  idle: [{"x":34.8,"y":0},{"x":34.8,"y":0},{"x":34.8,"y":0},{"x":35.3,"y":0},{"x":35.8,"y":0},{"x":35.8,"y":0},{"x":35.5,"y":0},{"x":34.8,"y":0}],
+  walk: [{"x":37.9,"y":13},{"x":39.5,"y":12},{"x":38.4,"y":11},{"x":39.1,"y":10},{"x":37.5,"y":12},{"x":37.9,"y":13},{"x":39.2,"y":11},{"x":38.8,"y":10}],
+  attack: [{"x":39.0,"y":9},{"x":38.3,"y":8},{"x":37.9,"y":9},{"x":34.0,"y":11},{"x":30.3,"y":8},{"x":44.8,"y":7},{"x":46.8,"y":10},{"x":44.3,"y":9}],
+  kick: [{"x":39.0,"y":9},{"x":38.1,"y":10},{"x":36.8,"y":10},{"x":30.8,"y":10},{"x":40.5,"y":8},{"x":37.7,"y":5},{"x":42.7,"y":12},{"x":39.3,"y":9}],
+  jump: [{"x":39.0,"y":9},{"x":38.0,"y":9},{"x":38.6,"y":13},{"x":39.9,"y":18},{"x":42.3,"y":4},{"x":38.5,"y":2},{"x":37.9,"y":5},{"x":38.3,"y":10}],
+  hurt: [{"x":34.8,"y":0},{"x":34.7,"y":0},{"x":34.5,"y":0},{"x":35.0,"y":1},{"x":36.0,"y":0},{"x":35.7,"y":1},{"x":34.5,"y":0},{"x":34.8,"y":0}],
 };
 
 const ANIMS = {
@@ -21,6 +31,10 @@ const ANIMS = {
   jump: { sheet: "jump", frames: 8, durationFrames: 36, loop: false },
   punch: { sheet: "attack", frames: 8, durationFrames: 22, loop: false },
   kick: { sheet: "kick", frames: 8, durationFrames: 34, loop: false },
+  // No dedicated special-move sprite was generated - reusing the kick sheet
+  // (same anchors work fine) with a gold glow + scale-up to read as a
+  // distinct, bigger move rather than a plain kick.
+  special: { sheet: "kick", frames: 8, durationFrames: 40, loop: false },
   hitstun: { sheet: "hurt", frames: 8, durationFrames: 24, loop: false },
   ko: { sheet: "death", frames: 12, durationFrames: 60, loop: false },
 };
@@ -49,53 +63,64 @@ function frameIndex(anim, stateT) {
 export function drawFighter(ctx, fighter, playerNum) {
   const { x, facing, state, stateT, headImg, jumpOffset } = fighter;
   const anim = ANIMS[state] || ANIMS.idle;
-  const sheet = SHEETS[anim.sheet];
+  const { img: sheet, frameSize } = SHEETS[anim.sheet];
   const frame = frameIndex(anim, stateT);
 
+  const isSpecial = state === "special";
+
   ctx.save();
-  ctx.translate(x, GROUND_Y - FRAME_SIZE - jumpOffset);
+  ctx.translate(x, GROUND_Y - frameSize - jumpOffset);
   if (facing === -1) {
-    ctx.translate(FRAME_SIZE, 0);
+    ctx.translate(frameSize, 0);
     ctx.scale(-1, 1);
   }
 
-  ctx.filter = TINTS[playerNum];
+  if (isSpecial) {
+    const glowT = Math.sin((frame / 8) * Math.PI);
+    ctx.save();
+    ctx.globalAlpha = 0.35 * glowT;
+    ctx.filter = "brightness(3) saturate(0)";
+    ctx.beginPath();
+    ctx.arc(frameSize / 2, frameSize / 2, frameSize * 0.6, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffd700";
+    ctx.fill();
+    ctx.restore();
+    ctx.translate(frameSize / 2, frameSize / 2);
+    ctx.scale(1.15, 1.15);
+    ctx.translate(-frameSize / 2, -frameSize / 2);
+  }
+
+  // Head is drawn first, body second, so the hoodie collar naturally
+  // overlaps the bottom of the head instead of sitting on top of it.
+  if (headImg && headImg.complete && state !== "ko") {
+    const anchors = HEAD_ANCHORS[anim.sheet];
+    const anchor = anchors ? anchors[frame % anchors.length] : { x: frameSize / 2, y: 10 };
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(
+      headImg,
+      anchor.x - HEAD_SIZE / 2,
+      anchor.y - HEAD_SIZE / 2,
+      HEAD_SIZE,
+      HEAD_SIZE,
+    );
+  }
+
+  ctx.filter = isSpecial ? `${TINTS[playerNum]} saturate(2) brightness(1.2)` : TINTS[playerNum];
   if (sheet && sheet.complete) {
     ctx.drawImage(
       sheet,
-      frame * FRAME_SIZE,
+      frame * frameSize,
       0,
-      FRAME_SIZE,
-      FRAME_SIZE,
+      frameSize,
+      frameSize,
       0,
       0,
-      FRAME_SIZE,
-      FRAME_SIZE,
+      frameSize,
+      frameSize,
     );
   }
   ctx.filter = "none";
-
-  if (headImg && headImg.complete && state !== "ko") {
-    ctx.imageSmoothingEnabled = false;
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(HEAD_ANCHOR_X, HEAD_ANCHOR_Y, HEAD_SIZE / 2, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.drawImage(
-      headImg,
-      HEAD_ANCHOR_X - HEAD_SIZE / 2,
-      HEAD_ANCHOR_Y - HEAD_SIZE / 2,
-      HEAD_SIZE,
-      HEAD_SIZE,
-    );
-    ctx.restore();
-
-    ctx.beginPath();
-    ctx.arc(HEAD_ANCHOR_X, HEAD_ANCHOR_Y, HEAD_SIZE / 2, 0, Math.PI * 2);
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-  }
 
   ctx.restore();
 }
@@ -111,6 +136,15 @@ export function drawArena(ctx, w, h) {
   ctx.moveTo(0, GROUND_Y);
   ctx.lineTo(w, GROUND_Y);
   ctx.stroke();
+}
+
+export function drawFlash(ctx, w, h, alpha) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
 }
 
 export { GROUND_Y };
