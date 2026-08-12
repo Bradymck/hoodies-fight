@@ -48,10 +48,17 @@ const SHEETS = {
   kick: { img: loadImg("assets/sprites/kick.png"), frameSize: 86 },
   jump: { img: loadImg("assets/sprites/jump.png"), frameSize: 86 },
   hurt: { img: loadImg("assets/sprites/hurt.png"), frameSize: 78 },
-  death: { img: loadImg("assets/sprites/death.png"), frameSize: 86 },
+  // Replaced with a real collapse-and-fall animation - the old file here was
+  // a placeholder, never an actual death pose.
+  death: { img: loadImg("assets/sprites/death.png"), frameSize: 62 },
   crouch: { img: loadImg("assets/sprites/crouch.png"), frameSize: 70 },
   block: { img: loadImg("assets/sprites/block.png"), frameSize: 78 },
   spellcast: { img: loadImg("assets/sprites/spellcast.png"), frameSize: 78 },
+  // Single-frame still poses, held for their whole state duration rather
+  // than cycling - same pattern crouch already uses.
+  slide: { img: loadImg("assets/sprites/slide.png"), frameSize: 62 },
+  knockback: { img: loadImg("assets/sprites/knockback.png"), frameSize: 76 },
+  uppercut: { img: loadImg("assets/sprites/uppercut.png"), frameSize: 78 },
 };
 
 // Per-frame neck/collar anchor points, sampled directly from each sheet's
@@ -80,6 +87,13 @@ const HEAD_ANCHORS = {
   // shift that lined up all six other sheets) - the character stands nearly
   // still through the whole cast, so these barely move frame to frame.
   spellcast: [{"x":35.9,"y":-7},{"x":35.9,"y":-7},{"x":35.9,"y":-7},{"x":36.3,"y":-7},{"x":36.4,"y":-7},{"x":36.1,"y":-7},{"x":35.9,"y":-7},{"x":36.3,"y":-7},{"x":36.4,"y":-7},{"x":36.1,"y":-7},{"x":35.9,"y":-7},{"x":36.0,"y":-7},{"x":36.0,"y":-7},{"x":35.9,"y":-7},{"x":35.9,"y":-7},{"x":35.9,"y":-7},{"x":36.9,"y":-7},{"x":38.2,"y":-7},{"x":37.8,"y":-7},{"x":38.3,"y":-7},{"x":36.7,"y":-7}],
+  // Single low ground pose - sampled the same way as crouch.
+  slide: [{"x":13.5,"y":2}],
+  // Single mid-air knocked-back pose.
+  knockback: [{"x":63.0,"y":4}],
+  // 8-frame crouch-charge-into-upward-strike - same sampling method as
+  // every other multi-frame sheet.
+  uppercut: [{"x":37.8,"y":-7},{"x":38.0,"y":-7},{"x":38.8,"y":3},{"x":39.7,"y":9},{"x":38.9,"y":10},{"x":45.3,"y":-7},{"x":55.3,"y":-5},{"x":42.4,"y":-6}],
 };
 
 const ANIMS = {
@@ -87,7 +101,10 @@ const ANIMS = {
   walk: { sheet: "walk", frames: 8, cyclesPerSec: 2, loop: true },
   block: { sheet: "block", frames: 8, cyclesPerSec: 1.3, loop: true },
   crouch: { sheet: "crouch", frames: 1, cyclesPerSec: 0, loop: true },
-  jump: { sheet: "jump", frames: 8, durationFrames: 36, loop: false },
+  // durationFrames (48) matches JUMP_DURATION in fighter.js - taller/longer
+  // arc than before so a jump can actually clear over the other fighter
+  // instead of just hopping in place.
+  jump: { sheet: "jump", frames: 8, durationFrames: 48, loop: false },
   punch: { sheet: "attack", frames: 8, durationFrames: 22, loop: false },
   kick: { sheet: "kick", frames: 8, durationFrames: 34, loop: false },
   // durationFrames (30) matches SPECIAL.release in fighter.js exactly, so
@@ -96,7 +113,16 @@ const ANIMS = {
   // remaining recovery frames in SPECIAL.duration, holding the release pose.
   special: { sheet: "spellcast", frames: 21, durationFrames: 30, loop: false },
   hitstun: { sheet: "hurt", frames: 8, durationFrames: 24, loop: false },
-  ko: { sheet: "death", frames: 12, durationFrames: 60, loop: false },
+  // Single still frame held for the whole slide (game.js moves the fighter's
+  // x directly while this state is active - see updateSlide). durationFrames
+  // matches SLIDE.duration in fighter.js.
+  slide: { sheet: "slide", frames: 1, durationFrames: 44, loop: false },
+  // Single still frame held while knocked back from a connecting slide.
+  knockback: { sheet: "knockback", frames: 1, durationFrames: 28, loop: false },
+  // durationFrames (32) over 8 sheet frames matches UPPERCUT.duration in
+  // fighter.js.
+  uppercut: { sheet: "uppercut", frames: 8, durationFrames: 32, loop: false },
+  ko: { sheet: "death", frames: 8, durationFrames: 60, loop: false },
 };
 
 const TINTS = {

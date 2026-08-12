@@ -16,7 +16,7 @@ import {
   HEAD_POP_DURATION,
   GROUND_Y,
 } from "./body.js";
-import { MAX_POWER } from "./fighter.js";
+import { MAX_POWER, SLIDE, UPPERCUT } from "./fighter.js";
 import { playSound } from "./sound.js";
 import { createAIController } from "./ai.js";
 
@@ -27,7 +27,8 @@ const KEYMAP = {
     block: "c",
     crouch: "s",
     jump: " ",
-    jump2: "w",
+    uppercut: "w",
+    slide: "e",
     punch: "f",
     kick: "g",
     special: "r",
@@ -38,6 +39,8 @@ const KEYMAP = {
     block: "m",
     crouch: "arrowdown",
     jump: "arrowup",
+    uppercut: "i",
+    slide: "u",
     punch: "k",
     kick: "l",
     special: "j",
@@ -65,6 +68,17 @@ const PROJECTILE_SPEED = 9;
 // center - roughly matches the fighter sprite's own on-screen body width.
 const PROJECTILE_HIT_RADIUS = 34;
 const PROJECTILE_SPRITE_TICKS_PER_FRAME = 2;
+// How fast the slide closes distance - faster than the projectile since
+// it's a ground rush, not a lobbed threat. SLIDE_SPEED * SLIDE.duration
+// (fighter.js) needs to comfortably clear the ~700px arena so it can still
+// reach a target that dodged by jumping, rather than timing out short of
+// them (measured live: 11 * 34 fell 26px short of a full-width gap and just
+// stopped mid-floor with nothing to show for it).
+const SLIDE_SPEED = 16;
+// Wider than PROJECTILE_HIT_RADIUS and set to just clear MIN_FIGHTER_GAP -
+// the slide should connect right as the two fighters would otherwise
+// collide, not noticeably before or after.
+const SLIDE_HIT_RADIUS = 70;
 // Solid-body distance the two fighters can never close past - matches the
 // actual rendered sprite width (~60px at full scale) so their bodies visibly
 // meet without overlapping, not just an arbitrary small number. Attack
@@ -84,7 +98,15 @@ const ARENA_MAX_X = 750;
 // "off" its own clamped position because the other overshoots). Instead each
 // side's shortfall against the wall is measured and handed to the other side
 // so the full gap is still enforced.
+//
+// Skipped entirely while either fighter is airborne - jumping used to be
+// purely cosmetic (jumpOffset just lifts the sprite; horizontally they were
+// still solid-blocked at MIN_FIGHTER_GAP the whole time), so there was
+// never actually a way to end up on the other side of the opponent. This is
+// what makes jumping over someone - or sliding past one who jumped over
+// your slide - actually work.
 function resolveCollision(a, b) {
+  if (a.state === "jump" || b.state === "jump") return;
   const dx = b.x - a.x;
   if (Math.abs(dx) >= MIN_FIGHTER_GAP) return;
   const dir = dx >= 0 ? 1 : -1;
@@ -125,7 +147,9 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       right: pressed.has(map.right),
       block: pressed.has(map.block),
       crouch: pressed.has(map.crouch),
-      jump: pressed.has(map.jump) || (map.jump2 && pressed.has(map.jump2)),
+      jump: pressed.has(map.jump),
+      uppercut: pressed.has(map.uppercut),
+      slide: pressed.has(map.slide),
       punch: pressed.has(map.punch),
       kick: pressed.has(map.kick),
       special: pressed.has(map.special),
@@ -200,7 +224,13 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     const gapX = Math.abs(attackerCenterX - defenderCenterX);
     const towardAttacker = attackerCenterX >= defenderCenterX ? 1 : -1;
     const contactHeight =
-      attacker.state === "kick" ? GROUND_Y - 20 : attacker.state === "special" ? PROJECTILE_Y : GROUND_Y - 50;
+      attacker.state === "kick" || attacker.state === "slide"
+        ? GROUND_Y - 20
+        : attacker.state === "special"
+          ? PROJECTILE_Y
+          : attacker.state === "uppercut"
+            ? GROUND_Y - 90
+            : GROUND_Y - 50;
     const contactX = defenderCenterX + towardAttacker * (gapX * 0.4);
 
     // A static splat layered behind the animated burst first, for extra
@@ -254,6 +284,60 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       flash = Math.max(flash, FLASH_ON_HIT);
       if (!wasBlocking) spawnBloodEffects(defender, attacker);
     }
+  }
+
+  // Slide moves the attacker forward on its own (not player-input movement)
+  // for as long as it's active. If it connects, the attacker stops dead
+  // (hasHit gates the movement itself, not just the hit-check) and the
+  // defender gets knocked back - that's the "you don't get behind them"
+  // outcome. If the defender jumped over it instead, no hit registers and
+  // the attacker just keeps sliding forward - since resolveCollision skips
+  // enforcement while either fighter is airborne, that forward movement can
+  // now actually carry the attacker past the defender's x, landing them on
+  // the other side once the defender comes back down.
+  function updateSlide(attacker, defender) {
+    if (attacker.state !== "slide") return;
+    if (attacker.hasHit) return;
+    attacker.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, attacker.x + SLIDE_SPEED * attacker.facing));
+
+    if (defender.state === "jump") return;
+    const attackerCenterX = attacker.x + BODY_CENTER_OFFSET;
+    const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
+    if (Math.abs(attackerCenterX - defenderCenterX) >= SLIDE_HIT_RADIUS) return;
+
+    attacker.hasHit = true;
+    defender.takeDamage(attacker.slideDamage, attacker.x, "slide");
+    const pushDir = defenderCenterX >= attackerCenterX ? 1 : -1;
+    defender.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, defender.x + pushDir * SLIDE.knockback));
+    attacker.lastEvent = "slide-hit";
+    shake = Math.max(shake, SHAKE_ON_HIT);
+    flash = Math.max(flash, FLASH_ON_HIT);
+    spawnBloodEffects(defender, attacker);
+  }
+
+  // Anti-air counter - deliberately does NOT exclude a jumping defender
+  // (every other melee check does) since catching one mid-jump is the whole
+  // point. On hit, the defender gets knocked back the way they came - since
+  // takeDamage forces them out of "jump" into "hitstun", and resolveCollision
+  // only skips enforcement while a fighter is actually airborne, this knockback
+  // is what actually prevents them landing past the attacker instead of just
+  // interrupting the jump in place.
+  function checkUppercutHit(attacker, defender) {
+    if (attacker.state !== "uppercut") return;
+    if (attacker.stateT < UPPERCUT.activeStart || attacker.stateT > UPPERCUT.activeEnd) return;
+    if (attacker.hasHit) return;
+    const attackerCenterX = attacker.x + BODY_CENTER_OFFSET;
+    const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
+    if (Math.abs(attackerCenterX - defenderCenterX) >= UPPERCUT.range) return;
+
+    attacker.hasHit = true;
+    defender.takeDamage(attacker.uppercutDamage, attacker.x, "uppercut");
+    const pushDir = defenderCenterX >= attackerCenterX ? 1 : -1;
+    defender.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, defender.x + pushDir * UPPERCUT.knockback));
+    attacker.lastEvent = "uppercut-hit";
+    shake = Math.max(shake, SHAKE_ON_HIT);
+    flash = Math.max(flash, FLASH_ON_HIT);
+    spawnBloodEffects(defender, attacker);
   }
 
   // Fires the instant the cast animation completes (fighter.js sets this
@@ -322,7 +406,11 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         break;
       case "kick-hit":
       case "special-hit":
-        playSound("kick", { rate: fighter.lastEvent === "special-hit" ? 0.75 : 1 });
+      case "slide-hit":
+      case "uppercut-hit":
+        playSound("kick", {
+          rate: fighter.lastEvent === "special-hit" ? 0.75 : fighter.lastEvent === "uppercut-hit" ? 1.3 : 1,
+        });
         break;
       case "block-taken":
         playSound("block");
@@ -332,6 +420,12 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         break;
       case "jump-start":
         playSound("jump");
+        break;
+      case "slide-start":
+        playSound("jump", { rate: 0.8 });
+        break;
+      case "uppercut-start":
+        playSound("jump", { rate: 1.3 });
         break;
       case "special-start":
         playSound("powerfull", { rate: 1.15 });
@@ -401,6 +495,10 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
 
     checkHit(p1, p2);
     checkHit(p2, p1);
+    checkUppercutHit(p1, p2);
+    checkUppercutHit(p2, p1);
+    updateSlide(p1, p2);
+    updateSlide(p2, p1);
     // Spawn (if this is the frame either fighter's cast just completed) and
     // resolve movement/hits for in-flight projectiles before the sound pass
     // below, so a hit landed this frame sets lastEvent in time for
@@ -408,6 +506,18 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     spawnProjectile(p1);
     spawnProjectile(p2);
     updateProjectiles();
+    // Keep both fighters facing each other regardless of which physical
+    // side they're actually standing on - computed last, after every move
+    // this frame (walk, slide, jump-crossup) has already landed, so a jump
+    // or slide that puts someone on the "wrong" side flips both of them to
+    // match instead of leaving them facing their original start direction.
+    if (p1.x <= p2.x) {
+      p1.facing = 1;
+      p2.facing = -1;
+    } else {
+      p1.facing = -1;
+      p2.facing = 1;
+    }
     handleSounds(p1);
     handleSounds(p2);
     updateHud();

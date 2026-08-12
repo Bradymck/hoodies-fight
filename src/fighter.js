@@ -15,8 +15,36 @@ const KICK = { duration: 34, activeStart: 10, activeEnd: 22, damage: 10, range: 
 // before control returns.
 const SPECIAL = { duration: 42, release: 30, damage: 25, cost: 50 };
 const HITSTUN_FRAMES = 24;
-const JUMP_DURATION = 36;
-const JUMP_HEIGHT = 55;
+// Tall/long enough that the arc actually clears over the other fighter's
+// full standing height (~109px at CHARACTER_SCALE) instead of just a hop in
+// place - see resolveCollision in game.js, which now lets fighters pass
+// through each other horizontally while either is airborne, so this is what
+// makes "jump over them" a real, usable option instead of just a dodge.
+const JUMP_DURATION = 48;
+const JUMP_HEIGHT = 140;
+// Ground-closing move: moves forward on its own the whole time it's active
+// (see updateSlide in game.js) rather than reading movement input. Free,
+// like jump/punch - the danger is landing the hit, not the cost. Exported
+// (along with UPPERCUT below) since game.js's updateSlide/checkUppercutHit
+// need the timing/range numbers directly - unlike damage, none of this
+// varies by archetype, so plain constants rather than a getter.
+// duration * SLIDE_SPEED (game.js) needs to comfortably clear the full
+// ~700px arena width, not just a typical engage distance - a slide that
+// times out short of a dodging opponent can never actually deliver the
+// "land behind them" payoff, it just stops in the middle of the floor.
+export const SLIDE = { duration: 44, damage: 12, knockback: 90 };
+// How long the "hit by a slide" reaction pose holds before returning to
+// idle - see takeDamage's kind==="slide" branch.
+const KNOCKBACK_DURATION = 28;
+// Anti-air counter: rises like a (shorter, faster) jump with an active
+// hitbox partway through, specifically so it can catch an opponent mid-jump
+// - see checkUppercutHit in game.js, which deliberately does NOT exclude a
+// jumping defender the way every other melee hit does. range needs to clear
+// MIN_FIGHTER_GAP (68, game.js) same as every melee range does - a range of
+// 60 here missed every time (verified live: two grounded fighters can never
+// stand closer than 68px apart in the first place, so a 60px range could
+// never reach anyone even standing right next to you).
+export const UPPERCUT = { duration: 32, activeStart: 16, activeEnd: 30, damage: 14, range: 80, height: 90, knockback: 100 };
 const PUNCH_POWER_GAIN = 12;
 const PASSIVE_REGEN_PER_FRAME = 0.15; // ~9/sec at 60fps
 
@@ -91,12 +119,20 @@ export class Fighter {
       this.power = Math.min(MAX_POWER, this.power + PASSIVE_REGEN_PER_FRAME);
     }
 
-    if (["punch", "kick", "special", "hitstun"].includes(this.state)) {
+    // slide and uppercut both hold their pose/travel on their own timers -
+    // game.js's updateSlide/checkUppercutHit own the actual x movement and
+    // hit detection for them, this just counts down back to idle. knockback
+    // is never entered via input at all (see takeDamage), only ever reached
+    // by getting hit by a slide.
+    if (["punch", "kick", "special", "hitstun", "slide", "knockback", "uppercut"].includes(this.state)) {
       const durations = {
         punch: PUNCH.duration,
         kick: KICK.duration,
         special: SPECIAL.duration,
         hitstun: HITSTUN_FRAMES,
+        slide: SLIDE.duration,
+        knockback: KNOCKBACK_DURATION,
+        uppercut: UPPERCUT.duration,
       };
       // Fires exactly once, the frame the cast animation completes - this is
       // what game.js listens for to actually spawn the projectile.
@@ -126,7 +162,15 @@ export class Fighter {
     }
     // Crouch locks you in place - no shuffling while ducked, and it doesn't
     // engage over any actual attack/jump input.
-    if (input.crouch && !input.punch && !input.kick && !input.special && !input.jump) {
+    if (
+      input.crouch &&
+      !input.punch &&
+      !input.kick &&
+      !input.special &&
+      !input.jump &&
+      !input.slide &&
+      !input.uppercut
+    ) {
       if (this.state !== "crouch") this.setState("crouch");
       return;
     }
@@ -139,6 +183,16 @@ export class Fighter {
     if (input.jump) {
       this.setState("jump");
       this.lastEvent = "jump-start";
+      return;
+    }
+    if (input.uppercut) {
+      this.setState("uppercut");
+      this.lastEvent = "uppercut-start";
+      return;
+    }
+    if (input.slide) {
+      this.setState("slide");
+      this.lastEvent = "slide-start";
       return;
     }
     if (input.punch && this.state !== "punch") {
@@ -170,10 +224,20 @@ export class Fighter {
     return vx;
   }
 
+  // Covers both real jump and the uppercut's own (shorter) rise - same
+  // parabola shape, different height/duration - so body.js's draw code can
+  // stay untouched and just read one property regardless of which move it
+  // is.
   get jumpOffset() {
-    if (this.state !== "jump") return 0;
-    const t = Math.min(1, this.stateT / JUMP_DURATION);
-    return JUMP_HEIGHT * 4 * t * (1 - t);
+    if (this.state === "jump") {
+      const t = Math.min(1, this.stateT / JUMP_DURATION);
+      return JUMP_HEIGHT * 4 * t * (1 - t);
+    }
+    if (this.state === "uppercut") {
+      const t = Math.min(1, this.stateT / UPPERCUT.duration);
+      return UPPERCUT.height * 4 * t * (1 - t);
+    }
+    return 0;
   }
 
   // Special has no melee hitbox of its own anymore - see spawnProjectile in
@@ -197,6 +261,14 @@ export class Fighter {
     return SPECIAL.damage * this.archetype.damageMult;
   }
 
+  get slideDamage() {
+    return SLIDE.damage * this.archetype.damageMult;
+  }
+
+  get uppercutDamage() {
+    return UPPERCUT.damage * this.archetype.damageMult;
+  }
+
   onLandedHit(isPunch) {
     if (isPunch) {
       this.power = Math.min(MAX_POWER, this.power + PUNCH_POWER_GAIN);
@@ -204,14 +276,19 @@ export class Fighter {
   }
 
   takeDamage(amount, fromX, kind) {
-    // Specials blow straight through a raised guard - full damage and normal
-    // hitstun even if the defender was holding block when it landed.
-    if (this.state === "block" && kind !== "special") {
+    // Specials and slides both blow straight through a raised guard - full
+    // damage even if the defender was holding block when it landed. A slide
+    // is meant to be dodged by jumping over it, not blocked; block doing
+    // nothing against it makes that the actual answer instead of a false one.
+    if (this.state === "block" && kind !== "special" && kind !== "slide") {
       this.health -= amount * 0.2 * this.archetype.blockMult;
       this.lastEvent = "block-taken";
     } else {
       this.health -= amount;
-      this.setState("hitstun");
+      // A slide connecting gets its own reaction pose/knockback instead of
+      // the generic hitstun - see updateSlide in game.js for the actual
+      // push, this just picks which animation plays while it happens.
+      this.setState(kind === "slide" ? "knockback" : "hitstun");
       this.lastEvent = "hit-taken";
     }
     this.health = Math.max(0, this.health);
