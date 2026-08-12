@@ -1,5 +1,6 @@
 const GROUND_Y = 300;
 const HEAD_SIZE = 30;
+const ARENA_BG = loadImg("assets/backgrounds/arena.png");
 
 const SHEETS = {
   idle: { img: loadImg("assets/sprites/idle.png"), frameSize: 78 },
@@ -132,11 +133,13 @@ export function drawFighter(ctx, fighter, playerNum) {
 
 export function drawArena(ctx, w, h) {
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = "#1b1330";
-  ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = "#3a2a5c";
-  ctx.fillRect(0, GROUND_Y, w, h - GROUND_Y);
-  ctx.strokeStyle = "#5a4680";
+  if (ARENA_BG.complete && ARENA_BG.naturalWidth > 0) {
+    ctx.drawImage(ARENA_BG, 0, 0, w, h);
+  } else {
+    ctx.fillStyle = "#1b1330";
+    ctx.fillRect(0, 0, w, h);
+  }
+  ctx.strokeStyle = "#5a4680aa";
   ctx.beginPath();
   ctx.moveTo(0, GROUND_Y);
   ctx.lineTo(w, GROUND_Y);
