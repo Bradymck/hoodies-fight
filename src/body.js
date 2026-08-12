@@ -58,8 +58,10 @@ const HEAD_ANCHORS = {
   hurt: [{"x":37.8,"y":-7},{"x":37.7,"y":-7},{"x":37.5,"y":-7},{"x":38.0,"y":-6},{"x":39.0,"y":-7},{"x":38.7,"y":-6},{"x":37.5,"y":-7},{"x":37.8,"y":-7}],
   // Single static pose - hunched crouch leaves very little headroom above
   // the hood, unlike the standing sheets, so this sits much closer to the
-  // sampled raw point than the others needed to.
-  crouch: [{"x":31,"y":4}],
+  // sampled raw point than the others needed to. Shifted forward (+9x) from
+  // the raw sample - the hunch leans the head toward the front, not the
+  // trailing/rear edge the raw collar point sat at.
+  crouch: [{"x":40,"y":4}],
 };
 
 const ANIMS = {
