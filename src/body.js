@@ -37,14 +37,6 @@ const BLOOD_SPLAT_EXTRA_VARIANTS = 3;
 const HEAD_POP_IMG = loadImg("assets/fx/head-pop.png");
 export const HEAD_POP_DURATION = 30;
 
-// Chest decal, stamped at draw time rather than baked into every sprite
-// frame - piggybacks on the existing per-frame HEAD_ANCHORS (same x, offset
-// down to chest height) instead of needing its own full anchor table.
-const ROBINHOOD_LOGO = loadImg("assets/fx/robinhood-logo.png");
-const ROBINHOOD_LOGO_WIDTH = 12;
-const ROBINHOOD_LOGO_ASPECT = 300 / 224;
-const ROBINHOOD_LOGO_Y_OFFSET = 23;
-
 const SHEETS = {
   idle: { img: loadImg("assets/sprites/idle.png"), frameSize: 78 },
   walk: { img: loadImg("assets/sprites/walk.png"), frameSize: 86 },
@@ -166,28 +158,6 @@ export function drawFighter(ctx, fighter, playerNum) {
     );
   }
   ctx.filter = "none";
-
-  // Chest logo draws on top of the body but under the head - a decal on the
-  // hoodie, not on the face.
-  if (ROBINHOOD_LOGO.complete && ROBINHOOD_LOGO.naturalWidth > 0 && state !== "ko") {
-    const anchors = HEAD_ANCHORS[anim.sheet];
-    const anchor = anchors ? anchors[frame % anchors.length] : { x: frameSize / 2, y: 10 };
-    const w = ROBINHOOD_LOGO_WIDTH;
-    const h = w * ROBINHOOD_LOGO_ASPECT;
-    ctx.save();
-    // The whole context is already mirrored here when facing left (see the
-    // scale(-1,1) above) - without counter-flipping, the logo mirrors along
-    // with the body and reads backwards on that fighter specifically.
-    // Counter-flip keeps it in its one true orientation regardless of facing.
-    if (facing === -1) {
-      ctx.translate(anchor.x * 2, 0);
-      ctx.scale(-1, 1);
-    }
-    ctx.imageSmoothingEnabled = false;
-    ctx.filter = "brightness(0) invert(1)";
-    ctx.drawImage(ROBINHOOD_LOGO, anchor.x - w / 2, anchor.y + ROBINHOOD_LOGO_Y_OFFSET, w, h);
-    ctx.restore();
-  }
 
   // Head is drawn on top of the body, in front of the collar. The head art
   // itself is now V-cropped at the bottom (see api.js cropToHeadShape) so
