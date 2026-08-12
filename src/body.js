@@ -1,5 +1,7 @@
 const GROUND_Y = 300;
 const HEAD_SIZE = 30;
+const CHARACTER_Y_OFFSET = 5;
+const PLATFORM_TILE_COUNT = 4;
 const ARENA_BG = loadImg("assets/backgrounds/arena.png");
 const PLATFORM_TILE = loadImg("assets/backgrounds/platform.png");
 let platformPattern = null;
@@ -75,7 +77,7 @@ export function drawFighter(ctx, fighter, playerNum) {
   const isSpecial = state === "special";
 
   ctx.save();
-  ctx.translate(x, GROUND_Y - frameSize - jumpOffset);
+  ctx.translate(x, GROUND_Y - frameSize - jumpOffset + CHARACTER_Y_OFFSET);
   if (facing === -1) {
     ctx.translate(frameSize, 0);
     ctx.scale(-1, 1);
@@ -145,13 +147,17 @@ export function drawArena(ctx, w, h) {
   if (PLATFORM_TILE.complete && PLATFORM_TILE.naturalWidth > 0) {
     if (!platformPattern) platformPattern = ctx.createPattern(PLATFORM_TILE, "repeat");
     const platformH = h - GROUND_Y;
-    const scale = platformH / PLATFORM_TILE.naturalHeight;
+    // Non-uniform scale so exactly PLATFORM_TILE_COUNT tiles span the full
+    // width with no partial tile cut off at the edge - keeps the seams
+    // landing cleanly instead of stopping mid-tile.
+    const scaleX = w / (PLATFORM_TILE_COUNT * PLATFORM_TILE.naturalWidth);
+    const scaleY = platformH / PLATFORM_TILE.naturalHeight;
     ctx.imageSmoothingEnabled = false;
     ctx.save();
     ctx.translate(0, GROUND_Y);
-    ctx.scale(scale, scale);
+    ctx.scale(scaleX, scaleY);
     ctx.fillStyle = platformPattern;
-    ctx.fillRect(0, 0, w / scale, platformH / scale);
+    ctx.fillRect(0, 0, w / scaleX, platformH / scaleY);
     ctx.restore();
   }
 }
