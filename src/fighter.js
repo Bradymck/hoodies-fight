@@ -102,9 +102,19 @@ export class Fighter {
     if (this.state === "block" && !input.block) {
       this.setState("idle");
     }
+    if (this.state === "crouch" && !input.crouch) {
+      this.setState("idle");
+    }
 
     if (input.block) {
       if (this.state !== "block") this.setState("block");
+      return;
+    }
+    // Crouch takes priority over walking (you can still shuffle side to side
+    // while ducked) but not over any actual attack/jump input.
+    if (input.crouch && !input.punch && !input.kick && !input.special && !input.jump) {
+      if (this.state !== "crouch") this.setState("crouch");
+      this.applyMove(input, opponent);
       return;
     }
     if (input.special && this.power >= SPECIAL.cost) {
@@ -164,6 +174,7 @@ export class Fighter {
       to: this.x + this.facing * spec.range,
       damage: spec.damage * this.archetype.damageMult,
       isPunch: spec === PUNCH,
+      kind: spec === PUNCH ? "punch" : spec === KICK ? "kick" : "special",
     };
   }
 
@@ -173,8 +184,10 @@ export class Fighter {
     }
   }
 
-  takeDamage(amount, fromX) {
-    if (this.state === "block") {
+  takeDamage(amount, fromX, kind) {
+    // Specials blow straight through a raised guard - full damage and normal
+    // hitstun even if the defender was holding block when it landed.
+    if (this.state === "block" && kind !== "special") {
       this.health -= amount * 0.2 * this.archetype.blockMult;
       this.lastEvent = "block-taken";
     } else {

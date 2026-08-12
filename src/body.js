@@ -56,6 +56,10 @@ const ANIMS = {
   idle: { sheet: "idle", frames: 8, cyclesPerSec: 1.1, loop: true },
   walk: { sheet: "walk", frames: 8, cyclesPerSec: 2, loop: true },
   block: { sheet: "idle", frames: 1, cyclesPerSec: 0, loop: true },
+  // No dedicated crouch sprite either - reusing idle's single frame and
+  // squishing it vertically at draw time (see drawFighter) so it still
+  // reads as a distinct low stance instead of just a static idle pose.
+  crouch: { sheet: "idle", frames: 1, cyclesPerSec: 0, loop: true },
   jump: { sheet: "jump", frames: 8, durationFrames: 36, loop: false },
   punch: { sheet: "attack", frames: 8, durationFrames: 22, loop: false },
   kick: { sheet: "kick", frames: 8, durationFrames: 34, loop: false },
@@ -95,6 +99,7 @@ export function drawFighter(ctx, fighter, playerNum) {
   const frame = frameIndex(anim, stateT);
 
   const isSpecial = state === "special";
+  const isCrouch = state === "crouch";
 
   ctx.save();
   ctx.translate(x, GROUND_Y - frameSize * CHARACTER_SCALE - jumpOffset + CHARACTER_Y_OFFSET);
@@ -102,6 +107,13 @@ export function drawFighter(ctx, fighter, playerNum) {
   if (facing === -1) {
     ctx.translate(frameSize, 0);
     ctx.scale(-1, 1);
+  }
+  if (isCrouch) {
+    // Squish vertically anchored at the feet (bottom of the frame) so the
+    // sprite sinks into a duck instead of just shrinking toward the top.
+    ctx.translate(0, frameSize);
+    ctx.scale(1, 0.7);
+    ctx.translate(0, -frameSize);
   }
 
   if (isSpecial) {

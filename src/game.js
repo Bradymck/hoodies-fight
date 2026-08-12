@@ -12,11 +12,12 @@ import { MAX_POWER } from "./fighter.js";
 import { playSound } from "./sound.js";
 
 const KEYMAP = {
-  p1: { left: "a", right: "d", block: "s", jump: " ", punch: "f", kick: "g", special: "r" },
+  p1: { left: "a", right: "d", block: "s", crouch: "c", jump: " ", punch: "f", kick: "g", special: "r" },
   p2: {
     left: "arrowleft",
     right: "arrowright",
     block: "arrowdown",
+    crouch: "m",
     jump: "arrowup",
     punch: "k",
     kick: "l",
@@ -48,6 +49,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
       left: pressed.has(map.left),
       right: pressed.has(map.right),
       block: pressed.has(map.block),
+      crouch: pressed.has(map.crouch),
       jump: pressed.has(map.jump),
       punch: pressed.has(map.punch),
       kick: pressed.has(map.kick),
@@ -90,12 +92,15 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
     const box = attacker.attackHitbox();
     if (!box) return;
     if (defender.state === "jump") return;
+    // Ducking clears kicks clean over the top - punches and the unblockable
+    // special still connect through a crouch, only the low kick whiffs.
+    if (defender.state === "crouch" && box.kind === "kick") return;
     const lo = Math.min(box.from, box.to);
     const hi = Math.max(box.from, box.to);
     if (defender.x >= lo && defender.x <= hi) {
-      const wasBlocking = defender.state === "block";
+      const wasBlocking = defender.state === "block" && box.kind !== "special";
       attacker.hasHit = true;
-      defender.takeDamage(box.damage, attacker.x);
+      defender.takeDamage(box.damage, attacker.x, box.kind);
       attacker.onLandedHit(box.isPunch);
       attacker.lastEvent = `${attacker.state}-hit`;
       shake = Math.max(shake, attacker.state === "special" ? SHAKE_ON_SPECIAL : SHAKE_ON_HIT);

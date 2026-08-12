@@ -136,6 +136,10 @@ h1 {
   letter-spacing: 0.05em;
 }
 
+#canvas-wrap {
+  position: relative;
+}
+
 canvas {
   background: #1b1330;
   border: 2px solid #444;
@@ -145,24 +149,40 @@ canvas {
   display: block;
 }
 
+/* Positioned relative to #canvas-wrap, which matches the canvas's own
+   bounds exactly - percentages here line up with the 800x360 game-world
+   coordinates fighters are drawn in, so this tracks their head height
+   instead of floating relative to the whole arena (HUD included). */
 .taunt {
   position: absolute;
-  top: 40px;
+  top: 34%;
   background: #fff;
   color: #000;
   padding: 6px 10px;
   border-radius: 6px;
-  max-width: 220px;
+  max-width: 190px;
   font-size: 12px;
   box-shadow: 0 2px 10px #0008;
 }
 
 #taunt-p1 {
-  left: 20px;
+  left: 10%;
 }
 
 #taunt-p2 {
-  right: 20px;
+  right: 10%;
+}
+
+#countdown {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 64px;
+  font-weight: bold;
+  color: #ffe066;
+  text-shadow: 0 0 12px #ffe066cc, 0 0 30px #ffe06666;
+  animation: pop-in 0.25s ease-out;
 }
 
 #result {

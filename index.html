@@ -32,15 +32,18 @@
       <span id="p1-name"></span>
       <span id="p2-name"></span>
     </div>
-    <canvas id="canvas" width="800" height="360"></canvas>
-    <div id="taunt-p1" class="taunt hidden"></div>
-    <div id="taunt-p2" class="taunt hidden"></div>
-    <div id="result" class="hidden">
-      <div id="result-title"></div>
-      <div id="result-quote"></div>
+    <div id="canvas-wrap">
+      <canvas id="canvas" width="800" height="360"></canvas>
+      <div id="taunt-p1" class="taunt hidden"></div>
+      <div id="taunt-p2" class="taunt hidden"></div>
+      <div id="countdown" class="hidden"></div>
+      <div id="result" class="hidden">
+        <div id="result-title"></div>
+        <div id="result-quote"></div>
+      </div>
     </div>
-    <p class="controls">P1: A/D move, Space jump, S block, F punch, G kick, R special &nbsp;|&nbsp; P2: Left/Right move, Up jump, Down block, K punch, L kick, J special</p>
-    <p class="controls">Punch builds power &nbsp;|&nbsp; kick/jump/special spend it &nbsp;|&nbsp; special needs a full-ish bar and hits hard</p>
+    <p class="controls">P1: A/D move, Space jump, S block, C crouch, F punch, G kick, R special &nbsp;|&nbsp; P2: Left/Right move, Up jump, Down block, M crouch, K punch, L kick, J special</p>
+    <p class="controls">Punch builds power &nbsp;|&nbsp; kick/jump/special spend it &nbsp;|&nbsp; crouch ducks under kicks &nbsp;|&nbsp; block cuts punch/kick damage but specials break through it</p>
   </div>
 
   <script type="module" src="src/main.js"></script>
