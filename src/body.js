@@ -73,6 +73,10 @@ export function drawFighter(ctx, fighter, playerNum) {
 
   if (headImg && headImg.complete && state !== "ko") {
     ctx.imageSmoothingEnabled = false;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(HEAD_ANCHOR_X, HEAD_ANCHOR_Y, HEAD_SIZE / 2, 0, Math.PI * 2);
+    ctx.clip();
     ctx.drawImage(
       headImg,
       HEAD_ANCHOR_X - HEAD_SIZE / 2,
@@ -80,6 +84,13 @@ export function drawFighter(ctx, fighter, playerNum) {
       HEAD_SIZE,
       HEAD_SIZE,
     );
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.arc(HEAD_ANCHOR_X, HEAD_ANCHOR_Y, HEAD_SIZE / 2, 0, Math.PI * 2);
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
   }
 
   ctx.restore();
