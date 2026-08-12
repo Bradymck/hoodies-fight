@@ -2,8 +2,15 @@ import { drawFighter, drawArena } from "./body.js";
 import { MAX_HEALTH } from "./fighter.js";
 
 const KEYMAP = {
-  p1: { left: "a", right: "d", block: "s", punch: "f", kick: "g" },
-  p2: { left: "arrowleft", right: "arrowright", block: "arrowdown", punch: "k", kick: "l" },
+  p1: { left: "a", right: "d", block: "s", jump: "w", punch: "f", kick: "g" },
+  p2: {
+    left: "arrowleft",
+    right: "arrowright",
+    block: "arrowdown",
+    jump: "arrowup",
+    punch: "k",
+    kick: "l",
+  },
 };
 
 export function createGame({ ctx, canvas, p1, p2, onEnd }) {
@@ -18,6 +25,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
       left: pressed.has(map.left),
       right: pressed.has(map.right),
       block: pressed.has(map.block),
+      jump: pressed.has(map.jump),
       punch: pressed.has(map.punch),
       kick: pressed.has(map.kick),
     };
@@ -30,6 +38,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
   function checkHit(attacker, defender) {
     const box = attacker.attackHitbox();
     if (!box) return;
+    if (defender.state === "jump") return;
     const lo = Math.min(box.from, box.to);
     const hi = Math.max(box.from, box.to);
     if (defender.x >= lo && defender.x <= hi) {

@@ -6,17 +6,21 @@ const HEAD_ANCHOR_Y = 10;
 
 const SHEETS = {
   idle: loadImg("assets/sprites/idle.png"),
+  walk: loadImg("assets/sprites/walk.png"),
   attack: loadImg("assets/sprites/attack.png"),
+  kick: loadImg("assets/sprites/kick.png"),
+  jump: loadImg("assets/sprites/jump.png"),
   hurt: loadImg("assets/sprites/hurt.png"),
   death: loadImg("assets/sprites/death.png"),
 };
 
 const ANIMS = {
   idle: { sheet: "idle", frames: 8, cyclesPerSec: 1.1, loop: true },
-  walk: { sheet: "idle", frames: 8, cyclesPerSec: 2.2, loop: true },
+  walk: { sheet: "walk", frames: 8, cyclesPerSec: 2, loop: true },
   block: { sheet: "idle", frames: 1, cyclesPerSec: 0, loop: true },
+  jump: { sheet: "jump", frames: 8, durationFrames: 36, loop: false },
   punch: { sheet: "attack", frames: 8, durationFrames: 22, loop: false },
-  kick: { sheet: "attack", frames: 8, durationFrames: 34, loop: false },
+  kick: { sheet: "kick", frames: 8, durationFrames: 34, loop: false },
   hitstun: { sheet: "hurt", frames: 8, durationFrames: 24, loop: false },
   ko: { sheet: "death", frames: 12, durationFrames: 60, loop: false },
 };
@@ -43,13 +47,13 @@ function frameIndex(anim, stateT) {
 }
 
 export function drawFighter(ctx, fighter, playerNum) {
-  const { x, facing, state, stateT, headImg } = fighter;
+  const { x, facing, state, stateT, headImg, jumpOffset } = fighter;
   const anim = ANIMS[state] || ANIMS.idle;
   const sheet = SHEETS[anim.sheet];
   const frame = frameIndex(anim, stateT);
 
   ctx.save();
-  ctx.translate(x, GROUND_Y - FRAME_SIZE);
+  ctx.translate(x, GROUND_Y - FRAME_SIZE - jumpOffset);
   if (facing === -1) {
     ctx.translate(FRAME_SIZE, 0);
     ctx.scale(-1, 1);
