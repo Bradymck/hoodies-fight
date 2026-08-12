@@ -1,9 +1,9 @@
 import { drawFighter, drawArena, drawFlash } from "./body.js";
 import { MAX_POWER } from "./fighter.js";
-import { playSound, playJumpWhoosh } from "./sound.js";
+import { playSound } from "./sound.js";
 
 const KEYMAP = {
-  p1: { left: "a", right: "d", block: "s", jump: "w", punch: "f", kick: "g", special: "r" },
+  p1: { left: "a", right: "d", block: "s", jump: " ", punch: "f", kick: "g", special: "r" },
   p2: {
     left: "arrowleft",
     right: "arrowright",
@@ -19,9 +19,15 @@ const SHAKE_ON_HIT = 6;
 const SHAKE_ON_SPECIAL = 12;
 const FLASH_ON_HIT = 0.25;
 
+const SCROLL_KEYS = new Set([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
+
 export function createGame({ ctx, canvas, p1, p2, onEnd }) {
   const pressed = new Set();
-  const keydown = (e) => pressed.add(e.key.toLowerCase());
+  const keydown = (e) => {
+    const key = e.key.toLowerCase();
+    if (SCROLL_KEYS.has(key)) e.preventDefault();
+    pressed.add(key);
+  };
   const keyup = (e) => pressed.delete(e.key.toLowerCase());
   window.addEventListener("keydown", keydown);
   window.addEventListener("keyup", keyup);
@@ -77,7 +83,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
         playSound("hit");
         break;
       case "jump-start":
-        playJumpWhoosh();
+        playSound("jump");
         break;
       case "special-start":
         playSound("powerfull", { rate: 1.15 });
