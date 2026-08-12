@@ -1,5 +1,17 @@
 const BASE = "https://api.onchainhoodies.xyz/v1";
 
+// Response shape isn't confirmed live (the API's been intermittently
+// unreachable while building this) - defensively checks the plausible
+// field names rather than assuming one, so this doesn't silently break if
+// it's `hoodies`/`tokens`/a bare array/objects vs raw IDs.
+export async function fetchWalletHoodies(address) {
+  const res = await fetch(`${BASE}/wallet/${address}/hoodies`);
+  if (!res.ok) throw new Error(`Could not load Hoodies for ${address}`);
+  const data = await res.json();
+  const list = data?.hoodies ?? data?.tokens ?? (Array.isArray(data) ? data : []);
+  return list.map((entry) => (typeof entry === "object" ? entry.id ?? entry.tokenId : entry));
+}
+
 export async function fetchToken(tokenId) {
   const res = await fetch(`${BASE}/token/${tokenId}`);
   if (!res.ok) throw new Error(`Hoodie #${tokenId} not found`);

@@ -14,6 +14,7 @@ import {
 } from "./body.js";
 import { MAX_POWER } from "./fighter.js";
 import { playSound } from "./sound.js";
+import { createAIController } from "./ai.js";
 
 const KEYMAP = {
   p1: {
@@ -86,7 +87,8 @@ function resolveCollision(a, b) {
 
 const SCROLL_KEYS = new Set([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
 
-export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60 }) {
+export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = false }) {
+  const getAIInput = p2AI ? createAIController(p2, p1) : null;
   const pressed = new Set();
   const keydown = (e) => {
     const key = e.key.toLowerCase();
@@ -294,7 +296,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60 }) {
     frame++;
 
     p1.update(readInput(KEYMAP.p1));
-    p2.update(readInput(KEYMAP.p2));
+    p2.update(getAIInput ? getAIInput() : readInput(KEYMAP.p2));
     resolveCollision(p1, p2);
 
     checkHit(p1, p2);
