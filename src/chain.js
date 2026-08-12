@@ -64,6 +64,67 @@ export async function readOwnerOf(tokenId) {
   return decodeAddress(result);
 }
 
+// This contract doesn't implement ERC721Enumerable - tokenOfOwnerByIndex
+// reverts (confirmed live) - so there's no direct "list token IDs owned by
+// X" call. Transfer event logs stand in for that instead: every token this
+// address ever received shows up as a Transfer with `to` = address, which
+// gives a candidate list even though some of those may have since been
+// transferred away again.
+const TRANSFER_EVENT_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+function addressToTopic(address) {
+  return `0x${"0".repeat(24)}${address.replace(/^0x/, "").toLowerCase()}`;
+}
+
+function decodeUint256(hex) {
+  return BigInt(hex).toString();
+}
+
+async function rpcCall(method, params) {
+  const res = await fetch(RPC_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  });
+  const body = await res.json();
+  if (body.error) throw new Error(body.error.message ?? `${method} failed`);
+  return body.result;
+}
+
+// Candidates from Transfer logs aren't necessarily still owned - someone
+// could have received a token and later sold it - so each one gets a live
+// ownerOf() check before being trusted. Capped and chunked rather than
+// firing them all at once: a high-churn wallet (many past transfers, most
+// no longer held) could otherwise mean hundreds of concurrent RPC calls for
+// one wallet connect.
+const OWNERSHIP_CHECK_CONCURRENCY = 15;
+const MAX_CANDIDATES = 300;
+
+export async function fetchWalletHoodiesOnChain(address) {
+  const logs = await rpcCall("eth_getLogs", [
+    {
+      address: CONTRACT,
+      fromBlock: "0x0",
+      toBlock: "latest",
+      topics: [TRANSFER_EVENT_TOPIC, null, addressToTopic(address)],
+    },
+  ]);
+
+  const candidateIds = [...new Set(logs.map((log) => decodeUint256(log.topics[3])))].slice(0, MAX_CANDIDATES);
+
+  const owned = [];
+  for (let i = 0; i < candidateIds.length; i += OWNERSHIP_CHECK_CONCURRENCY) {
+    const batch = candidateIds.slice(i, i + OWNERSHIP_CHECK_CONCURRENCY);
+    const owners = await Promise.all(
+      batch.map((id) => readOwnerOf(id).catch(() => null)),
+    );
+    batch.forEach((id, j) => {
+      if (owners[j] && owners[j].toLowerCase() === address.toLowerCase()) owned.push(id);
+    });
+  }
+  return owned;
+}
+
 export async function readTokenURI(tokenId) {
   const result = await ethCall(SELECTOR_TOKEN_URI, tokenId);
   return decodeString(result);
