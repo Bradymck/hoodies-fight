@@ -92,22 +92,6 @@ export function drawFighter(ctx, fighter, playerNum) {
     ctx.translate(-frameSize / 2, -frameSize / 2);
   }
 
-  // Head is drawn first, body second, so the hoodie collar naturally
-  // overlaps the bottom of the head instead of sitting on top of it.
-  if (headImg && headImg.complete && state !== "ko") {
-    const anchors = HEAD_ANCHORS[anim.sheet];
-    const anchor = anchors ? anchors[frame % anchors.length] : { x: frameSize / 2, y: 10 };
-
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(
-      headImg,
-      anchor.x - HEAD_SIZE / 2,
-      anchor.y - HEAD_SIZE / 2,
-      HEAD_SIZE,
-      HEAD_SIZE,
-    );
-  }
-
   ctx.filter = isSpecial ? `${TINTS[playerNum]} saturate(2) brightness(1.2)` : TINTS[playerNum];
   if (sheet && sheet.complete) {
     ctx.drawImage(
@@ -123,6 +107,24 @@ export function drawFighter(ctx, fighter, playerNum) {
     );
   }
   ctx.filter = "none";
+
+  // Head is drawn on top of the body, in front of the collar. The head art
+  // itself is now V-cropped at the bottom (see api.js cropToHeadShape) so
+  // its neck point should land close to the body sprite's own collar V
+  // instead of overlapping the shoulders.
+  if (headImg && headImg.complete && state !== "ko") {
+    const anchors = HEAD_ANCHORS[anim.sheet];
+    const anchor = anchors ? anchors[frame % anchors.length] : { x: frameSize / 2, y: 10 };
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(
+      headImg,
+      anchor.x - HEAD_SIZE / 2,
+      anchor.y - HEAD_SIZE / 2,
+      HEAD_SIZE,
+      HEAD_SIZE,
+    );
+  }
 
   ctx.restore();
 }
