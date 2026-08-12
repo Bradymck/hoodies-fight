@@ -8,7 +8,11 @@ import {
   pickBloodSpotVariant,
   pickBloodSplatVariant,
   drawHeadPop,
+  drawSurgeBlast,
+  drawEnergyBurst,
   BLOOD_SPATTER_TOTAL_FRAMES,
+  SURGE_BLAST_TOTAL_FRAMES,
+  ENERGY_BURST_TOTAL_FRAMES,
   HEAD_POP_DURATION,
   GROUND_Y,
 } from "./body.js";
@@ -44,7 +48,20 @@ const SHAKE_ON_HIT = 6;
 const SHAKE_ON_SPECIAL = 12;
 const FLASH_ON_HIT = 0.25;
 const SPATTER_TICKS_PER_FRAME = 3;
+const IMPACT_TICKS_PER_FRAME = 3;
 const MAX_GROUND_BLOOD = 90;
+// Mid-air splats (splatExtras) age out and fade rather than sticking around
+// forever - unlike groundBlood, which is meant to pool and stay.
+const SPLAT_EXTRA_LIFETIME_FRAMES = 50;
+const SPLAT_EXTRA_FADE_FRAMES = 15;
+// How fast the special's projectile crosses the arena - covers the full
+// ~700px play area in a bit over a second at 60fps, fast enough to read as
+// a real threat but slow enough a jump can still dodge it.
+const PROJECTILE_SPEED = 9;
+// Half-width of its hit window, centered on the target's visual body
+// center - roughly matches the fighter sprite's own on-screen body width.
+const PROJECTILE_HIT_RADIUS = 34;
+const PROJECTILE_SPRITE_TICKS_PER_FRAME = 2;
 // Solid-body distance the two fighters can never close past - matches the
 // actual rendered sprite width (~60px at full scale) so their bodies visibly
 // meet without overlapping, not just an arbitrary small number. Attack
@@ -122,10 +139,17 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   const spatters = [];
   const splatExtras = [];
   const headPops = [];
+  const projectiles = [];
+  const impacts = [];
 
   // Rough head height rather than a per-frame anchor lookup - matches the
   // same level-of-precision the blood-spatter positioning already uses.
   const HEAD_Y = GROUND_Y - 95;
+  // Flies at head height, not chest height - high enough that a crouching
+  // target's shorter silhouette clears under it (see the crouch dodge check
+  // in updateProjectiles below), the way a real fireball you duck under
+  // should work.
+  const PROJECTILE_Y = HEAD_Y;
 
   // fighter.x is the LEFT EDGE of the sprite's full bounding box, not its
   // visual center - drawFighter always translates to x then draws the frame
@@ -165,15 +189,23 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     // than a true 50/50 midpoint - the attacker's own lunge animation pushes
     // them visually closer than their logical x, so a true midpoint reads as
     // skewed toward the attacker. Height varies by attack type so a kick
-    // lands lower than a punch/special.
+    // lands lower than a punch, and a special (thrown from updateProjectiles
+    // with a synthetic attacker.state of "special") lands at the same head
+    // height PROJECTILE_Y actually flies at, not the old chest-level punch
+    // height - otherwise the blood would land somewhere the fireball never
+    // was.
     const gapX = Math.abs(attackerCenterX - defenderCenterX);
     const towardAttacker = attackerCenterX >= defenderCenterX ? 1 : -1;
-    const contactHeight = attacker.state === "kick" ? GROUND_Y - 20 : GROUND_Y - 50;
+    const contactHeight =
+      attacker.state === "kick" ? GROUND_Y - 20 : attacker.state === "special" ? PROJECTILE_Y : GROUND_Y - 50;
     const contactX = defenderCenterX + towardAttacker * (gapX * 0.4);
 
     // A static splat layered behind the animated burst first, for extra
     // density - fully randomized position/rotation/scale each time so
     // stacking several hits' worth never looks like the same stamp reused.
+    // Spawned in mid-air at the contact point rather than on the ground, so
+    // unlike groundBlood it doesn't stick around forever - it ages out (see
+    // SPLAT_EXTRA_LIFETIME_FRAMES below) instead of hanging there.
     const splatCount = 1 + Math.floor(Math.random() * 2);
     for (let i = 0; i < splatCount; i++) {
       splatExtras.push({
@@ -182,6 +214,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         variant: pickBloodSplatVariant(),
         rotation: Math.random() * Math.PI * 2,
         scale: 0.7 + Math.random() * 0.6,
+        t: 0,
       });
     }
     while (splatExtras.length > MAX_GROUND_BLOOD) splatExtras.shift();
@@ -197,24 +230,85 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     }
   }
 
+  // Punch/kick only now - special has no melee hitbox of its own, see
+  // spawnProjectile/updateProjectiles below for its (ranged) hit detection.
   function checkHit(attacker, defender) {
     const box = attacker.attackHitbox();
     if (!box) return;
     if (defender.state === "jump") return;
-    // Ducking clears kicks clean over the top - punches and the unblockable
-    // special still connect through a crouch, only the low kick whiffs.
+    // Ducking clears kicks clean over the top - punches still connect
+    // through a crouch, only the low kick whiffs.
     if (defender.state === "crouch" && box.kind === "kick") return;
     const lo = Math.min(box.from, box.to);
     const hi = Math.max(box.from, box.to);
     if (defender.x >= lo && defender.x <= hi) {
-      const wasBlocking = defender.state === "block" && box.kind !== "special";
+      const wasBlocking = defender.state === "block";
       attacker.hasHit = true;
       defender.takeDamage(box.damage, attacker.x, box.kind);
       attacker.onLandedHit(box.isPunch);
       attacker.lastEvent = `${attacker.state}-hit`;
-      shake = Math.max(shake, attacker.state === "special" ? SHAKE_ON_SPECIAL : SHAKE_ON_HIT);
+      shake = Math.max(shake, SHAKE_ON_HIT);
       flash = Math.max(flash, FLASH_ON_HIT);
       if (!wasBlocking) spawnBloodEffects(defender, attacker);
+    }
+  }
+
+  // Fires the instant the cast animation completes (fighter.js sets this
+  // exactly once, at SPECIAL.release) - spawns a projectile at the caster's
+  // chest that travels on its own from here, independent of whatever the
+  // caster does next (they're free to move/block/get hit while it's in
+  // flight, same as a real ranged move).
+  function spawnProjectile(fighter) {
+    if (fighter.lastEvent !== "special-release") return;
+    projectiles.push({
+      x: fighter.x + BODY_CENTER_OFFSET + fighter.facing * 34,
+      y: PROJECTILE_Y,
+      facing: fighter.facing,
+      owner: fighter,
+      t: 0,
+    });
+  }
+
+  // Runs after both fighters' own update() so a projectile spawned this same
+  // frame (via spawnProjectile above) still gets its first move/hit-check
+  // immediately rather than sitting a frame behind.
+  function updateProjectiles() {
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      const p = projectiles[i];
+      p.x += PROJECTILE_SPEED * p.facing;
+      p.t++;
+
+      const target = p.owner === p1 ? p2 : p1;
+      // Flies at head height (PROJECTILE_Y) specifically so a crouch - which
+      // ducks under kicks in checkHit - can duck under this too; jump still
+      // dodges it the same as every other attack. A raised guard does NOT
+      // stop it though, matching the old melee special's "blows straight
+      // through block" behavior (see takeDamage's kind check in fighter.js).
+      if (target.state !== "jump" && target.state !== "crouch") {
+        const targetCenterX = target.x + BODY_CENTER_OFFSET;
+        if (Math.abs(targetCenterX - p.x) < PROJECTILE_HIT_RADIUS) {
+          target.takeDamage(p.owner.specialDamage, p.x, "special");
+          p.owner.lastEvent = "special-hit";
+          shake = Math.max(shake, SHAKE_ON_SPECIAL);
+          flash = Math.max(flash, FLASH_ON_HIT);
+          // Anchored at the projectile's actual position (the real contact
+          // point), not the caster's - the caster may be standing far away
+          // by the time this lands, so their own x would be the wrong place
+          // to burst blood. spawnBloodEffects just needs something with an
+          // .x/.state shape; this fakes a minimal "attacker" positioned
+          // exactly where the hit happened.
+          spawnBloodEffects(target, { x: p.x - BODY_CENTER_OFFSET, state: "special" });
+          impacts.push({ x: p.x, y: p.y, t: 0 });
+          projectiles.splice(i, 1);
+          continue;
+        }
+      }
+
+      // Missed and flew off the edge of the arena - fizzles out quietly
+      // rather than bursting against a wall that isn't really there.
+      if (p.x < ARENA_MIN_X - 60 || p.x > ARENA_MAX_X + 60) {
+        projectiles.splice(i, 1);
+      }
     }
   }
 
@@ -238,6 +332,9 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         break;
       case "special-start":
         playSound("powerfull", { rate: 1.15 });
+        break;
+      case "special-release":
+        playSound("powerfull", { rate: 0.8 });
         break;
       case "ko":
         playSound("ko");
@@ -301,6 +398,13 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
 
     checkHit(p1, p2);
     checkHit(p2, p1);
+    // Spawn (if this is the frame either fighter's cast just completed) and
+    // resolve movement/hits for in-flight projectiles before the sound pass
+    // below, so a hit landed this frame sets lastEvent in time for
+    // handleSounds to actually see it rather than one frame late.
+    spawnProjectile(p1);
+    spawnProjectile(p2);
+    updateProjectiles();
     handleSounds(p1);
     handleSounds(p2);
     updateHud();
@@ -319,14 +423,30 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     drawArena(ctx, canvas.width, canvas.height);
     drawFighter(ctx, p1, 1);
     drawFighter(ctx, p2, 2);
+    for (const p of projectiles) {
+      drawSurgeBlast(ctx, p.x, p.y, Math.floor(p.t / PROJECTILE_SPRITE_TICKS_PER_FRAME), p.facing);
+    }
     // Ground blood draws in front of both fighters, not underneath - at
     // close range a lunging attack sprite can visually overlap the
     // defender's spot and hide/misattribute a decal drawn below them.
     for (const decal of groundBlood) drawBloodSpot(ctx, decal);
     // Static splats layer behind the animated spatter burst, per the extra
     // asset - drawn after the ground spots but before the burst itself.
-    for (const s of splatExtras) {
+    // These are mid-air hit-point decals, not ground pooling, so they age
+    // out and fade rather than sticking around for the rest of the fight.
+    for (let i = splatExtras.length - 1; i >= 0; i--) {
+      const s = splatExtras[i];
+      if (s.t >= SPLAT_EXTRA_LIFETIME_FRAMES) {
+        splatExtras.splice(i, 1);
+        continue;
+      }
+      const fadeIn = SPLAT_EXTRA_LIFETIME_FRAMES - SPLAT_EXTRA_FADE_FRAMES;
+      const alpha = s.t < fadeIn ? 1 : 1 - (s.t - fadeIn) / SPLAT_EXTRA_FADE_FRAMES;
+      ctx.save();
+      ctx.globalAlpha = alpha;
       drawBloodSplatExtra(ctx, s.x, s.y, s.variant, s.rotation, s.scale);
+      ctx.restore();
+      s.t++;
     }
     for (let i = spatters.length - 1; i >= 0; i--) {
       const s = spatters[i];
@@ -337,6 +457,16 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       }
       drawBloodSpatter(ctx, s.x, s.y, spriteFrame, s.rotation);
       s.t++;
+    }
+    for (let i = impacts.length - 1; i >= 0; i--) {
+      const im = impacts[i];
+      const spriteFrame = Math.floor(im.t / IMPACT_TICKS_PER_FRAME);
+      if (spriteFrame >= ENERGY_BURST_TOTAL_FRAMES) {
+        impacts.splice(i, 1);
+        continue;
+      }
+      drawEnergyBurst(ctx, im.x, im.y, spriteFrame);
+      im.t++;
     }
     for (let i = headPops.length - 1; i >= 0; i--) {
       const p = headPops[i];

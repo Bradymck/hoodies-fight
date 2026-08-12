@@ -45,6 +45,13 @@ export function createAIController(self, opponent) {
     }
 
     if (dist > ENGAGE_RANGE) {
+      // Special is a thrown projectile now, not a melee move - it's just as
+      // usable from across the arena as it is up close, so take the shot
+      // instead of always closing distance first.
+      if (self.power >= 50 && Math.random() < 0.25) {
+        input.special = true;
+        return;
+      }
       input[towardOpponent] = true;
       // Rarely jump in from further out instead of always walking.
       if (dist > ENGAGE_RANGE * 2 && self.power >= 15 && Math.random() < 0.15) {
@@ -69,7 +76,12 @@ export function createAIController(self, opponent) {
       return;
     }
 
-    // In the gap between attack range and engage range - close in slowly.
+    // In the gap between attack range and engage range - take a pot-shot
+    // with the ranged special sometimes instead of always just closing in.
+    if (self.power >= 50 && Math.random() < 0.2) {
+      input.special = true;
+      return;
+    }
     input[towardOpponent] = true;
   }
 

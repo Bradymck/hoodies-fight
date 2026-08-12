@@ -8,7 +8,12 @@ export const MAX_POWER = 100;
 // scale, so the enforced gap is ~68px; these all clear it with margin.
 const PUNCH = { duration: 22, activeStart: 6, activeEnd: 14, damage: 6, range: 74 };
 const KICK = { duration: 34, activeStart: 10, activeEnd: 22, damage: 10, range: 84, cost: 20 };
-const SPECIAL = { duration: 40, activeStart: 14, activeEnd: 26, damage: 25, range: 94, cost: 50 };
+// Ranged, not a melee hitbox - the cast animation plays out over `release`
+// frames, then game.js reads "special-release" off lastEvent and spawns a
+// projectile of its own that travels and hits independently. `duration`
+// leaves a few recovery frames after release for the throw's follow-through
+// before control returns.
+const SPECIAL = { duration: 42, release: 30, damage: 25, cost: 50 };
 const HITSTUN_FRAMES = 24;
 const JUMP_DURATION = 36;
 const JUMP_HEIGHT = 55;
@@ -93,6 +98,11 @@ export class Fighter {
         special: SPECIAL.duration,
         hitstun: HITSTUN_FRAMES,
       };
+      // Fires exactly once, the frame the cast animation completes - this is
+      // what game.js listens for to actually spawn the projectile.
+      if (this.state === "special" && this.stateT === SPECIAL.release) {
+        this.lastEvent = "special-release";
+      }
       if (this.stateT >= durations[this.state]) this.setState("idle");
       return;
     }
@@ -167,9 +177,11 @@ export class Fighter {
     return JUMP_HEIGHT * 4 * t * (1 - t);
   }
 
+  // Special has no melee hitbox of its own anymore - see spawnProjectile in
+  // game.js, which handles its hit detection independently once the
+  // projectile it fires is actually in flight.
   attackHitbox() {
-    const spec =
-      this.state === "punch" ? PUNCH : this.state === "kick" ? KICK : this.state === "special" ? SPECIAL : null;
+    const spec = this.state === "punch" ? PUNCH : this.state === "kick" ? KICK : null;
     if (!spec) return null;
     if (this.stateT < spec.activeStart || this.stateT > spec.activeEnd) return null;
     if (this.hasHit) return null;
@@ -178,8 +190,12 @@ export class Fighter {
       to: this.x + this.facing * spec.range,
       damage: spec.damage * this.archetype.damageMult,
       isPunch: spec === PUNCH,
-      kind: spec === PUNCH ? "punch" : spec === KICK ? "kick" : "special",
+      kind: spec === PUNCH ? "punch" : "kick",
     };
+  }
+
+  get specialDamage() {
+    return SPECIAL.damage * this.archetype.damageMult;
   }
 
   onLandedHit(isPunch) {

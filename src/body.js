@@ -2,6 +2,10 @@ const GROUND_Y = 300;
 const HEAD_SIZE = 30;
 const CHARACTER_Y_OFFSET = 5;
 const CHARACTER_SCALE = 1.4;
+// Corrects the crouch sheet's own art scale back in line with the other
+// sheets - see the comment where this is applied in drawFighter for the
+// measured numbers behind it.
+const CROUCH_EXTRA_SCALE = 0.77;
 const PLATFORM_TILE_COUNT = 4;
 const ARENA_BACKGROUNDS = [
   loadImg("assets/backgrounds/arena-2.png"),
@@ -47,6 +51,7 @@ const SHEETS = {
   death: { img: loadImg("assets/sprites/death.png"), frameSize: 86 },
   crouch: { img: loadImg("assets/sprites/crouch.png"), frameSize: 70 },
   block: { img: loadImg("assets/sprites/block.png"), frameSize: 78 },
+  spellcast: { img: loadImg("assets/sprites/spellcast.png"), frameSize: 78 },
 };
 
 // Per-frame neck/collar anchor points, sampled directly from each sheet's
@@ -70,6 +75,11 @@ const HEAD_ANCHORS = {
   // trailing/rear edge the raw collar point sat at.
   crouch: [{"x":40,"y":4}],
   block: [{"x":37.8,"y":-7},{"x":37.8,"y":-7},{"x":38.6,"y":-7},{"x":38.6,"y":-7},{"x":38.6,"y":-7},{"x":39.0,"y":-7},{"x":38.6,"y":-7},{"x":39.0,"y":-7}],
+  // Sampled with the same method/offset as every other sheet above (raw
+  // topmost-opaque-row + first-6-rows x-center, then the same +3x/-7y net
+  // shift that lined up all six other sheets) - the character stands nearly
+  // still through the whole cast, so these barely move frame to frame.
+  spellcast: [{"x":35.9,"y":-7},{"x":35.9,"y":-7},{"x":35.9,"y":-7},{"x":36.3,"y":-7},{"x":36.4,"y":-7},{"x":36.1,"y":-7},{"x":35.9,"y":-7},{"x":36.3,"y":-7},{"x":36.4,"y":-7},{"x":36.1,"y":-7},{"x":35.9,"y":-7},{"x":36.0,"y":-7},{"x":36.0,"y":-7},{"x":35.9,"y":-7},{"x":35.9,"y":-7},{"x":35.9,"y":-7},{"x":36.9,"y":-7},{"x":38.2,"y":-7},{"x":37.8,"y":-7},{"x":38.3,"y":-7},{"x":36.7,"y":-7}],
 };
 
 const ANIMS = {
@@ -80,10 +90,11 @@ const ANIMS = {
   jump: { sheet: "jump", frames: 8, durationFrames: 36, loop: false },
   punch: { sheet: "attack", frames: 8, durationFrames: 22, loop: false },
   kick: { sheet: "kick", frames: 8, durationFrames: 34, loop: false },
-  // No dedicated special-move sprite was generated - reusing the kick sheet
-  // (same anchors work fine) with a gold glow + scale-up to read as a
-  // distinct, bigger move rather than a plain kick.
-  special: { sheet: "kick", frames: 8, durationFrames: 40, loop: false },
+  // durationFrames (30) matches SPECIAL.release in fighter.js exactly, so
+  // the cast finishes on the sheet's last (fullest-charge) frame right as
+  // the projectile fires - frameIndex clamps to that last frame for the
+  // remaining recovery frames in SPECIAL.duration, holding the release pose.
+  special: { sheet: "spellcast", frames: 21, durationFrames: 30, loop: false },
   hitstun: { sheet: "hurt", frames: 8, durationFrames: 24, loop: false },
   ko: { sheet: "death", frames: 12, durationFrames: 60, loop: false },
 };
@@ -126,6 +137,18 @@ export function drawFighter(ctx, fighter, playerNum) {
   if (facing === -1) {
     ctx.translate(frameSize, 0);
     ctx.scale(-1, 1);
+  }
+
+  // The crouch source art draws the character filling notably more of its
+  // frame than every other sheet (measured ~69% of frame width vs ~47% for
+  // idle/walk/etc), so at the same CHARACTER_SCALE it read as the character
+  // visibly growing on the squat instead of just hunching down. Scaled down
+  // around the frame's bottom-center - feet stay planted on GROUND_Y and the
+  // pose stays horizontally centered, only the silhouette itself shrinks.
+  if (state === "crouch") {
+    ctx.translate(frameSize / 2, frameSize);
+    ctx.scale(CROUCH_EXTRA_SCALE, CROUCH_EXTRA_SCALE);
+    ctx.translate(-frameSize / 2, -frameSize);
   }
 
   if (isSpecial) {
@@ -293,6 +316,67 @@ export function drawBloodSplatExtra(ctx, x, y, variant, rotation, scale) {
 
 export function pickBloodSplatVariant() {
   return Math.floor(Math.random() * BLOOD_SPLAT_EXTRA_VARIANTS);
+}
+
+// Traveling projectile fired by the ranged special (game.js owns its
+// position/lifetime, this just draws whatever frame it's on). The sheet's
+// 16th frame is a leftover opaque placeholder tile from the source asset,
+// not real content, so only the first 15 are ever indexed.
+const SURGE_BLAST_SHEET = loadImg("assets/fx/surge-blast.png");
+const SURGE_BLAST_FRAME = 180;
+export const SURGE_BLAST_TOTAL_FRAMES = 15;
+// Native frames are huge relative to the ~78px fighter frames - scaled down
+// to read as a fireball roughly proportional to the character throwing it.
+const SURGE_BLAST_DRAW_SCALE = 0.55;
+
+export function drawSurgeBlast(ctx, x, y, frame, facing) {
+  if (!SURGE_BLAST_SHEET.complete || SURGE_BLAST_SHEET.naturalWidth === 0) return;
+  const f = ((frame % SURGE_BLAST_TOTAL_FRAMES) + SURGE_BLAST_TOTAL_FRAMES) % SURGE_BLAST_TOTAL_FRAMES;
+  const size = SURGE_BLAST_FRAME * SURGE_BLAST_DRAW_SCALE;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.translate(x, y);
+  if (facing === -1) ctx.scale(-1, 1);
+  ctx.drawImage(
+    SURGE_BLAST_SHEET,
+    f * SURGE_BLAST_FRAME,
+    0,
+    SURGE_BLAST_FRAME,
+    SURGE_BLAST_FRAME,
+    -size / 2,
+    -size / 2,
+    size,
+    size,
+  );
+  ctx.restore();
+}
+
+// Impact burst where a projectile actually lands - plays through once, like
+// the melee blood-spatter burst, and is gone.
+const ENERGY_BURST_SHEET = loadImg("assets/fx/energy-burst.png");
+const ENERGY_BURST_FRAME = 80;
+export const ENERGY_BURST_TOTAL_FRAMES = 5;
+const ENERGY_BURST_DRAW_SCALE = 1.6;
+
+export function drawEnergyBurst(ctx, x, y, frame) {
+  if (!ENERGY_BURST_SHEET.complete || ENERGY_BURST_SHEET.naturalWidth === 0) return;
+  const f = Math.min(ENERGY_BURST_TOTAL_FRAMES - 1, Math.max(0, frame));
+  const size = ENERGY_BURST_FRAME * ENERGY_BURST_DRAW_SCALE;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.translate(x, y);
+  ctx.drawImage(
+    ENERGY_BURST_SHEET,
+    f * ENERGY_BURST_FRAME,
+    0,
+    ENERGY_BURST_FRAME,
+    ENERGY_BURST_FRAME,
+    -size / 2,
+    -size / 2,
+    size,
+    size,
+  );
+  ctx.restore();
 }
 
 // Plays once over the KO's head position - scales up and fades out rather
