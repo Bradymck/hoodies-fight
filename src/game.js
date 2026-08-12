@@ -74,9 +74,14 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
     });
     if (groundBlood.length > MAX_GROUND_BLOOD) groundBlood.shift();
 
+    // Anchored on the defender (where the hit actually lands), not a
+    // midpoint - a midpoint reads as "near the attacker" once their strike
+    // animation lunges forward. Height varies by attack type so a kick
+    // lands lower than a punch/special.
+    const contactHeight = attacker.state === "kick" ? GROUND_Y - 20 : GROUND_Y - 50;
     spatters.push({
-      x: (defender.x + attacker.x) / 2,
-      y: GROUND_Y - 45,
+      x: defender.x + defender.facing * 8,
+      y: contactHeight,
       t: 0,
     });
   }

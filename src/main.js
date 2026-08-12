@@ -2,6 +2,7 @@ import { loadFighterData } from "./api.js";
 import { Fighter } from "./fighter.js";
 import { createGame } from "./game.js";
 import { initSound, playSound, playRandomTrack } from "./sound.js";
+import { pickRandomArena } from "./body.js";
 
 const startBtn = document.getElementById("start-btn");
 const setupStatus = document.getElementById("setup-status");
@@ -31,6 +32,7 @@ startBtn.addEventListener("click", async () => {
 
     showTaunt("taunt-p1", data1.taunt);
     showTaunt("taunt-p2", data2.taunt);
+    pickRandomArena();
 
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");

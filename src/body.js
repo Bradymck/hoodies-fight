@@ -1,10 +1,21 @@
 const GROUND_Y = 300;
 const HEAD_SIZE = 30;
 const CHARACTER_Y_OFFSET = 5;
+const CHARACTER_SCALE = 1.4;
 const PLATFORM_TILE_COUNT = 4;
-const ARENA_BG = loadImg("assets/backgrounds/arena.png");
+const ARENA_BACKGROUNDS = [
+  loadImg("assets/backgrounds/arena-2.png"),
+  loadImg("assets/backgrounds/arena-3.png"),
+];
 const PLATFORM_TILE = loadImg("assets/backgrounds/platform.png");
 let platformPattern = null;
+let currentArenaIndex = 0;
+
+// Called once per fight (see main.js) so the backdrop stays fixed for the
+// whole match instead of changing mid-fight.
+export function pickRandomArena() {
+  currentArenaIndex = Math.floor(Math.random() * ARENA_BACKGROUNDS.length);
+}
 
 const BLOOD_SPOTS = [
   loadImg("assets/fx/blood-spot-1.png"),
@@ -86,7 +97,8 @@ export function drawFighter(ctx, fighter, playerNum) {
   const isSpecial = state === "special";
 
   ctx.save();
-  ctx.translate(x, GROUND_Y - frameSize - jumpOffset + CHARACTER_Y_OFFSET);
+  ctx.translate(x, GROUND_Y - frameSize * CHARACTER_SCALE - jumpOffset + CHARACTER_Y_OFFSET);
+  ctx.scale(CHARACTER_SCALE, CHARACTER_SCALE);
   if (facing === -1) {
     ctx.translate(frameSize, 0);
     ctx.scale(-1, 1);
@@ -146,8 +158,9 @@ export function drawFighter(ctx, fighter, playerNum) {
 
 export function drawArena(ctx, w, h) {
   ctx.clearRect(0, 0, w, h);
-  if (ARENA_BG.complete && ARENA_BG.naturalWidth > 0) {
-    ctx.drawImage(ARENA_BG, 0, 0, w, h);
+  const bg = ARENA_BACKGROUNDS[currentArenaIndex];
+  if (bg.complete && bg.naturalWidth > 0) {
+    ctx.drawImage(bg, 0, 0, w, h);
   } else {
     ctx.fillStyle = "#1b1330";
     ctx.fillRect(0, 0, w, h);
