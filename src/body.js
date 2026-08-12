@@ -26,6 +26,11 @@ const BLOOD_SPATTER_SHEET = loadImg("assets/fx/blood-spatter-sheet.png");
 const BLOOD_SPATTER_FRAME = 34;
 const BLOOD_SPATTER_FRAMES = 5;
 
+// KO flourish - single static burst image (pulled from the aquaprime-sandbox
+// project's fx set), animated here via scale/fade rather than a frame sheet.
+const HEAD_POP_IMG = loadImg("assets/fx/head-pop.png");
+export const HEAD_POP_DURATION = 30;
+
 const SHEETS = {
   idle: { img: loadImg("assets/sprites/idle.png"), frameSize: 78 },
   walk: { img: loadImg("assets/sprites/walk.png"), frameSize: 86 },
@@ -34,6 +39,7 @@ const SHEETS = {
   jump: { img: loadImg("assets/sprites/jump.png"), frameSize: 86 },
   hurt: { img: loadImg("assets/sprites/hurt.png"), frameSize: 78 },
   death: { img: loadImg("assets/sprites/death.png"), frameSize: 86 },
+  crouch: { img: loadImg("assets/sprites/crouch.png"), frameSize: 70 },
 };
 
 // Per-frame neck/collar anchor points, sampled directly from each sheet's
@@ -50,16 +56,17 @@ const HEAD_ANCHORS = {
   kick: [{"x":42.0,"y":2},{"x":41.1,"y":3},{"x":39.8,"y":3},{"x":33.8,"y":3},{"x":43.5,"y":1},{"x":40.7,"y":-2},{"x":45.7,"y":5},{"x":42.3,"y":2}],
   jump: [{"x":42.0,"y":2},{"x":41.0,"y":2},{"x":41.6,"y":6},{"x":42.9,"y":11},{"x":45.3,"y":-3},{"x":41.5,"y":-5},{"x":40.9,"y":-2},{"x":41.3,"y":3}],
   hurt: [{"x":37.8,"y":-7},{"x":37.7,"y":-7},{"x":37.5,"y":-7},{"x":38.0,"y":-6},{"x":39.0,"y":-7},{"x":38.7,"y":-6},{"x":37.5,"y":-7},{"x":37.8,"y":-7}],
+  // Single static pose - hunched crouch leaves very little headroom above
+  // the hood, unlike the standing sheets, so this sits much closer to the
+  // sampled raw point than the others needed to.
+  crouch: [{"x":31,"y":4}],
 };
 
 const ANIMS = {
   idle: { sheet: "idle", frames: 8, cyclesPerSec: 1.1, loop: true },
   walk: { sheet: "walk", frames: 8, cyclesPerSec: 2, loop: true },
   block: { sheet: "idle", frames: 1, cyclesPerSec: 0, loop: true },
-  // No dedicated crouch sprite either - reusing idle's single frame and
-  // squishing it vertically at draw time (see drawFighter) so it still
-  // reads as a distinct low stance instead of just a static idle pose.
-  crouch: { sheet: "idle", frames: 1, cyclesPerSec: 0, loop: true },
+  crouch: { sheet: "crouch", frames: 1, cyclesPerSec: 0, loop: true },
   jump: { sheet: "jump", frames: 8, durationFrames: 36, loop: false },
   punch: { sheet: "attack", frames: 8, durationFrames: 22, loop: false },
   kick: { sheet: "kick", frames: 8, durationFrames: 34, loop: false },
@@ -99,21 +106,16 @@ export function drawFighter(ctx, fighter, playerNum) {
   const frame = frameIndex(anim, stateT);
 
   const isSpecial = state === "special";
-  const isCrouch = state === "crouch";
 
   ctx.save();
+  // frameSize is per-sheet (crouch's is shorter than the standing sheets),
+  // so anchoring off it here naturally grounds the crouch pose without any
+  // extra transform - a hunched sprite is just a shorter frame.
   ctx.translate(x, GROUND_Y - frameSize * CHARACTER_SCALE - jumpOffset + CHARACTER_Y_OFFSET);
   ctx.scale(CHARACTER_SCALE, CHARACTER_SCALE);
   if (facing === -1) {
     ctx.translate(frameSize, 0);
     ctx.scale(-1, 1);
-  }
-  if (isCrouch) {
-    // Squish vertically anchored at the feet (bottom of the frame) so the
-    // sprite sinks into a duck instead of just shrinking toward the top.
-    ctx.translate(0, frameSize);
-    ctx.scale(1, 0.7);
-    ctx.translate(0, -frameSize);
   }
 
   if (isSpecial) {
@@ -245,6 +247,21 @@ export function drawBloodSpatter(ctx, x, y, frame) {
     BLOOD_SPATTER_FRAME,
     BLOOD_SPATTER_FRAME,
   );
+  ctx.restore();
+}
+
+// Plays once over the KO's head position - scales up and fades out rather
+// than stepping frames, since the source art is one still burst image.
+export function drawHeadPop(ctx, x, y, t) {
+  if (!HEAD_POP_IMG.complete || HEAD_POP_IMG.naturalWidth === 0) return;
+  const progress = Math.min(1, t / HEAD_POP_DURATION);
+  const scale = 0.6 + progress * 1.4;
+  const alpha = 1 - progress;
+  const size = HEAD_POP_IMG.naturalWidth * scale;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(HEAD_POP_IMG, x - size / 2, y - size / 2, size, size);
   ctx.restore();
 }
 

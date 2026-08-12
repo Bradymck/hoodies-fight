@@ -5,7 +5,9 @@ import {
   drawBloodSpot,
   drawBloodSpatter,
   pickBloodSpotVariant,
+  drawHeadPop,
   BLOOD_SPATTER_TOTAL_FRAMES,
+  HEAD_POP_DURATION,
   GROUND_Y,
 } from "./body.js";
 import { MAX_POWER } from "./fighter.js";
@@ -65,6 +67,11 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
   const powerFullFired = { p1: false, p2: false };
   const groundBlood = [];
   const spatters = [];
+  const headPops = [];
+
+  // Rough head height rather than a per-frame anchor lookup - matches the
+  // same level-of-precision the blood-spatter positioning already uses.
+  const HEAD_Y = GROUND_Y - 95;
 
   function spawnBloodEffects(defender, attacker) {
     groundBlood.push({
@@ -132,6 +139,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
         break;
       case "ko":
         playSound("ko");
+        headPops.push({ x: fighter.x, y: HEAD_Y, t: 0 });
         break;
     }
   }
@@ -221,6 +229,15 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
       }
       drawBloodSpatter(ctx, s.x, s.y, spriteFrame);
       s.t++;
+    }
+    for (let i = headPops.length - 1; i >= 0; i--) {
+      const p = headPops[i];
+      if (p.t >= HEAD_POP_DURATION) {
+        headPops.splice(i, 1);
+        continue;
+      }
+      drawHeadPop(ctx, p.x, p.y, p.t);
+      p.t++;
     }
     ctx.restore();
 

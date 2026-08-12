@@ -110,11 +110,10 @@ export class Fighter {
       if (this.state !== "block") this.setState("block");
       return;
     }
-    // Crouch takes priority over walking (you can still shuffle side to side
-    // while ducked) but not over any actual attack/jump input.
+    // Crouch locks you in place - no shuffling while ducked, and it doesn't
+    // engage over any actual attack/jump input.
     if (input.crouch && !input.punch && !input.kick && !input.special && !input.jump) {
       if (this.state !== "crouch") this.setState("crouch");
-      this.applyMove(input, opponent);
       return;
     }
     if (input.special && this.power >= SPECIAL.cost) {
