@@ -1,11 +1,43 @@
 const BASE = "https://api.onchainhoodies.xyz/v1";
 
+const RETRY_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 400; // doubles each retry: 400, 800, 1600
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// fetch() throws a bare "Failed to fetch" TypeError for anything below the
+// HTTP layer - DNS failure, connection refused, or (what we've actually
+// been seeing) their API dropping the TLS handshake entirely. Most of what
+// we've observed looks like transient blips rather than sustained downtime,
+// so retry with backoff before surfacing anything to the user - only the
+// last attempt's failure actually gets thrown, with a message that says
+// what's really wrong instead of a bare "Failed to fetch".
+async function apiFetch(path) {
+  let lastErr;
+  for (let attempt = 0; attempt < RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await fetch(`${BASE}${path}`);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < RETRY_ATTEMPTS - 1) {
+        await sleep(RETRY_BASE_DELAY_MS * 2 ** attempt);
+      }
+    }
+  }
+  if (lastErr instanceof TypeError) {
+    throw new Error("Can't reach the OnChainHoodies API right now - it may be temporarily down. Try again in a moment.");
+  }
+  throw lastErr;
+}
+
 // Response shape isn't confirmed live (the API's been intermittently
 // unreachable while building this) - defensively checks the plausible
 // field names rather than assuming one, so this doesn't silently break if
 // it's `hoodies`/`tokens`/a bare array/objects vs raw IDs.
 export async function fetchWalletHoodies(address) {
-  const res = await fetch(`${BASE}/wallet/${address}/hoodies`);
+  const res = await apiFetch(`/wallet/${address}/hoodies`);
   if (!res.ok) throw new Error(`Could not load Hoodies for ${address}`);
   const data = await res.json();
   const list = data?.hoodies ?? data?.tokens ?? (Array.isArray(data) ? data : []);
@@ -13,9 +45,20 @@ export async function fetchWalletHoodies(address) {
 }
 
 export async function fetchToken(tokenId) {
-  const res = await fetch(`${BASE}/token/${tokenId}`);
-  if (!res.ok) throw new Error(`Hoodie #${tokenId} not found`);
-  return res.json();
+  try {
+    const res = await apiFetch(`/token/${tokenId}`);
+    if (!res.ok) throw new Error(`Hoodie #${tokenId} not found`);
+    return await res.json();
+  } catch (err) {
+    // Only fall back to reading the chain directly once retries are
+    // exhausted (apiFetch's own error, not a real 404 - a token that
+    // genuinely doesn't exist should stay a 404, not silently succeed via
+    // a different path).
+    if (!(err instanceof Error) || !err.message.startsWith("Can't reach")) throw err;
+    console.warn(`[api] REST API unreachable, falling back to on-chain read for #${tokenId}`);
+    const { fetchTokenOnChain } = await import("./chain.js");
+    return fetchTokenOnChain(tokenId);
+  }
 }
 
 export async function fetchHoodTalk(tokenId) {
