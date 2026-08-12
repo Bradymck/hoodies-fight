@@ -1,4 +1,13 @@
-import { drawFighter, drawArena, drawFlash } from "./body.js";
+import {
+  drawFighter,
+  drawArena,
+  drawFlash,
+  drawBloodSpot,
+  drawBloodSpatter,
+  pickBloodSpotVariant,
+  BLOOD_SPATTER_TOTAL_FRAMES,
+  GROUND_Y,
+} from "./body.js";
 import { MAX_POWER } from "./fighter.js";
 import { playSound } from "./sound.js";
 
@@ -18,6 +27,8 @@ const KEYMAP = {
 const SHAKE_ON_HIT = 6;
 const SHAKE_ON_SPECIAL = 12;
 const FLASH_ON_HIT = 0.25;
+const SPATTER_TICKS_PER_FRAME = 3;
+const MAX_GROUND_BLOOD = 40;
 
 const SCROLL_KEYS = new Set([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
 
@@ -50,6 +61,25 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
   let shake = 0;
   let flash = 0;
   const powerFullFired = { p1: false, p2: false };
+  const groundBlood = [];
+  const spatters = [];
+
+  function spawnBloodEffects(defender, attacker) {
+    groundBlood.push({
+      imgIndex: pickBloodSpotVariant(),
+      x: defender.x + (Math.random() - 0.5) * 20,
+      y: GROUND_Y + 4 + Math.random() * 8,
+      size: 14 + Math.random() * 12,
+      rotation: Math.random() * Math.PI * 2,
+    });
+    if (groundBlood.length > MAX_GROUND_BLOOD) groundBlood.shift();
+
+    spatters.push({
+      x: (defender.x + attacker.x) / 2,
+      y: GROUND_Y - 45,
+      t: 0,
+    });
+  }
 
   function checkHit(attacker, defender) {
     const box = attacker.attackHitbox();
@@ -58,12 +88,14 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
     const lo = Math.min(box.from, box.to);
     const hi = Math.max(box.from, box.to);
     if (defender.x >= lo && defender.x <= hi) {
+      const wasBlocking = defender.state === "block";
       attacker.hasHit = true;
       defender.takeDamage(box.damage, attacker.x);
       attacker.onLandedHit(box.isPunch);
       attacker.lastEvent = `${attacker.state}-hit`;
       shake = Math.max(shake, attacker.state === "special" ? SHAKE_ON_SPECIAL : SHAKE_ON_HIT);
       flash = Math.max(flash, FLASH_ON_HIT);
+      if (!wasBlocking) spawnBloodEffects(defender, attacker);
     }
   }
 
@@ -152,8 +184,19 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
       if (shake < 0.5) shake = 0;
     }
     drawArena(ctx, canvas.width, canvas.height);
+    for (const decal of groundBlood) drawBloodSpot(ctx, decal);
     drawFighter(ctx, p1, 1);
     drawFighter(ctx, p2, 2);
+    for (let i = spatters.length - 1; i >= 0; i--) {
+      const s = spatters[i];
+      const spriteFrame = Math.floor(s.t / SPATTER_TICKS_PER_FRAME);
+      if (spriteFrame >= BLOOD_SPATTER_TOTAL_FRAMES) {
+        spatters.splice(i, 1);
+        continue;
+      }
+      drawBloodSpatter(ctx, s.x, s.y, spriteFrame);
+      s.t++;
+    }
     ctx.restore();
 
     if (flash > 0) {

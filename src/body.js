@@ -6,6 +6,15 @@ const ARENA_BG = loadImg("assets/backgrounds/arena.png");
 const PLATFORM_TILE = loadImg("assets/backgrounds/platform.png");
 let platformPattern = null;
 
+const BLOOD_SPOTS = [
+  loadImg("assets/fx/blood-spot-1.png"),
+  loadImg("assets/fx/blood-spot-2.png"),
+  loadImg("assets/fx/blood-spot-3.png"),
+];
+const BLOOD_SPATTER_SHEET = loadImg("assets/fx/blood-spatter-sheet.png");
+const BLOOD_SPATTER_FRAME = 34;
+const BLOOD_SPATTER_FRAMES = 5;
+
 const SHEETS = {
   idle: { img: loadImg("assets/sprites/idle.png"), frameSize: 78 },
   walk: { img: loadImg("assets/sprites/walk.png"), frameSize: 86 },
@@ -168,6 +177,49 @@ export function drawFlash(ctx, w, h, alpha) {
   ctx.globalAlpha = alpha;
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+}
+
+// Ground blood decals persist for the whole fight. `decal` is
+// {imgIndex, x, y, size, rotation} - imgIndex picked/randomized by the
+// caller so repeated hits don't all look identical. `size` is the desired
+// on-screen width in px - the three source images are different native
+// sizes (32/50/100px), so this normalizes them to a comparable footprint.
+export function drawBloodSpot(ctx, decal) {
+  const img = BLOOD_SPOTS[decal.imgIndex % BLOOD_SPOTS.length];
+  if (!img.complete || img.naturalWidth === 0) return;
+  ctx.save();
+  ctx.translate(decal.x, decal.y);
+  ctx.rotate(decal.rotation);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, -decal.size / 2, -decal.size / 2, decal.size, decal.size);
+  ctx.restore();
+}
+
+export function pickBloodSpotVariant() {
+  return Math.floor(Math.random() * BLOOD_SPOTS.length);
+}
+
+// Brief impact burst at the hit location - plays through its 5 frames once
+// and is gone, unlike the ground spots which stay.
+export const BLOOD_SPATTER_TOTAL_FRAMES = BLOOD_SPATTER_FRAMES;
+
+export function drawBloodSpatter(ctx, x, y, frame) {
+  if (!BLOOD_SPATTER_SHEET.complete || BLOOD_SPATTER_SHEET.naturalWidth === 0) return;
+  const f = Math.min(BLOOD_SPATTER_FRAMES - 1, Math.max(0, frame));
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(
+    BLOOD_SPATTER_SHEET,
+    f * BLOOD_SPATTER_FRAME,
+    0,
+    BLOOD_SPATTER_FRAME,
+    BLOOD_SPATTER_FRAME,
+    x - BLOOD_SPATTER_FRAME / 2,
+    y - BLOOD_SPATTER_FRAME / 2,
+    BLOOD_SPATTER_FRAME,
+    BLOOD_SPATTER_FRAME,
+  );
   ctx.restore();
 }
 
