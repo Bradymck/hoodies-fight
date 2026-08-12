@@ -31,7 +31,10 @@ export class Fighter {
   }
 
   update(input, opponent) {
-    if (this.state === "ko") return;
+    if (this.state === "ko") {
+      this.stateT++;
+      return;
+    }
 
     this.stateT++;
 

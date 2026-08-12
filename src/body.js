@@ -1,55 +1,82 @@
-const COLORS = {
-  1: { body: "#3d8bfd", limb: "#2a5fb0" },
-  2: { body: "#fd3d5c", limb: "#b02a3f" },
+const FRAME_SIZE = 86;
+const GROUND_Y = 300;
+const HEAD_SIZE = 30;
+const HEAD_ANCHOR_X = 40;
+const HEAD_ANCHOR_Y = 10;
+
+const SHEETS = {
+  idle: loadImg("assets/sprites/idle.png"),
+  attack: loadImg("assets/sprites/attack.png"),
+  hurt: loadImg("assets/sprites/hurt.png"),
+  death: loadImg("assets/sprites/death.png"),
 };
 
-const GROUND_Y = 300;
-const BODY_W = 40;
-const BODY_H = 90;
-const HEAD_SIZE = 26;
+const ANIMS = {
+  idle: { sheet: "idle", frames: 8, cyclesPerSec: 1.1, loop: true },
+  walk: { sheet: "idle", frames: 8, cyclesPerSec: 2.2, loop: true },
+  block: { sheet: "idle", frames: 1, cyclesPerSec: 0, loop: true },
+  punch: { sheet: "attack", frames: 8, durationFrames: 22, loop: false },
+  kick: { sheet: "attack", frames: 8, durationFrames: 34, loop: false },
+  hitstun: { sheet: "hurt", frames: 8, durationFrames: 24, loop: false },
+  ko: { sheet: "death", frames: 12, durationFrames: 60, loop: false },
+};
+
+const TINTS = {
+  1: "hue-rotate(-88deg) saturate(1.6) brightness(1.05)",
+  2: "hue-rotate(-58deg) saturate(1.3) brightness(0.85)",
+};
+
+function loadImg(src) {
+  const img = new Image();
+  img.src = src;
+  return img;
+}
+
+function frameIndex(anim, stateT) {
+  if (anim.loop) {
+    if (anim.cyclesPerSec === 0) return 0;
+    const framesPerSec = anim.cyclesPerSec * anim.frames;
+    return Math.floor((stateT / 60) * framesPerSec) % anim.frames;
+  }
+  const perFrame = anim.durationFrames / anim.frames;
+  return Math.min(anim.frames - 1, Math.floor(stateT / perFrame));
+}
 
 export function drawFighter(ctx, fighter, playerNum) {
   const { x, facing, state, stateT, headImg } = fighter;
-  const c = COLORS[playerNum];
-  const f = facing; // 1 = facing right, -1 = facing left
+  const anim = ANIMS[state] || ANIMS.idle;
+  const sheet = SHEETS[anim.sheet];
+  const frame = frameIndex(anim, stateT);
 
   ctx.save();
-  ctx.translate(x, GROUND_Y);
-
-  if (state === "ko") {
-    ctx.rotate((f * Math.PI) / 2);
-    ctx.translate(-BODY_H / 2, 0);
+  ctx.translate(x, GROUND_Y - FRAME_SIZE);
+  if (facing === -1) {
+    ctx.translate(FRAME_SIZE, 0);
+    ctx.scale(-1, 1);
   }
 
-  const flash = state === "hitstun" && Math.floor(stateT / 60) % 2 === 0;
-  ctx.fillStyle = flash ? "#ffffff" : c.body;
-
-  const legLift = state === "walk" ? Math.sin(stateT / 60) * 8 : 0;
-  ctx.fillRect(-BODY_W / 2, -BODY_H + 40, 12, 40 - legLift);
-  ctx.fillRect(2, -BODY_H + 40, 12, 40 + legLift);
-
-  let kickExtend = 0;
-  if (state === "kick") kickExtend = Math.min(stateT / 2, 34);
-  ctx.fillRect(f * (BODY_W / 2 - 6), -BODY_H + 45, f * (14 + kickExtend), 14);
-
-  ctx.fillRect(-BODY_W / 2, -BODY_H + 18, BODY_W, 40);
-
-  ctx.fillStyle = flash ? "#ffffff" : c.limb;
-  if (state === "block") {
-    ctx.fillRect(f * (BODY_W / 2 - 4), -BODY_H + 20, f * 18, 30);
-  } else {
-    let punchExtend = 0;
-    if (state === "punch") punchExtend = Math.min(stateT / 1.5, 30);
-    ctx.fillRect(f * (BODY_W / 2 - 4), -BODY_H + 24, f * (16 + punchExtend), 10);
-    ctx.fillRect(-BODY_W / 2 - 4, -BODY_H + 30, 10, 24);
+  ctx.filter = TINTS[playerNum];
+  if (sheet && sheet.complete) {
+    ctx.drawImage(
+      sheet,
+      frame * FRAME_SIZE,
+      0,
+      FRAME_SIZE,
+      FRAME_SIZE,
+      0,
+      0,
+      FRAME_SIZE,
+      FRAME_SIZE,
+    );
   }
+  ctx.filter = "none";
 
-  if (headImg && headImg.complete) {
+  if (headImg && headImg.complete && state !== "ko") {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(
       headImg,
-      -HEAD_SIZE / 2,
-      -BODY_H + 18 - HEAD_SIZE + 4,
+      HEAD_ANCHOR_X - HEAD_SIZE / 2,
+      HEAD_ANCHOR_Y - HEAD_SIZE / 2,
       HEAD_SIZE,
       HEAD_SIZE,
     );
@@ -71,4 +98,4 @@ export function drawArena(ctx, w, h) {
   ctx.stroke();
 }
 
-export { GROUND_Y, BODY_W, BODY_H };
+export { GROUND_Y };
