@@ -133,6 +133,30 @@ h1 {
   min-height: 1.2em;
 }
 
+/* OpenSea's own brand blue rather than the site's green - reads as a
+   distinct external "go buy one" action, not another same-page control. */
+#opensea-btn {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 8px 20px;
+  background: transparent;
+  color: #2081e2;
+  border: 2px solid #2081e2;
+  cursor: pointer;
+  font-weight: bold;
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  text-decoration: none;
+  box-shadow: 0 0 12px #2081e244;
+  transition: transform 0.1s ease-out;
+}
+
+#opensea-btn:hover {
+  transform: scale(1.03);
+  background: #2081e222;
+}
+
 #character-select {
   margin-top: 12px;
 }

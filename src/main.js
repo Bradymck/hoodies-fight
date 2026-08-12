@@ -10,6 +10,7 @@ const startBtn = document.getElementById("start-btn");
 const setupStatus = document.getElementById("setup-status");
 const connectWalletBtn = document.getElementById("connect-wallet-btn");
 const walletStatus = document.getElementById("wallet-status");
+const openseaBtn = document.getElementById("opensea-btn");
 const characterSelect = document.getElementById("character-select");
 const characterGrid = document.getElementById("character-grid");
 
@@ -84,6 +85,7 @@ startBtn.addEventListener("click", async () => {
 connectWalletBtn.addEventListener("click", async () => {
   connectWalletBtn.disabled = true;
   walletStatus.textContent = "Connecting...";
+  openseaBtn.classList.add("hidden");
   const soundReady = initSound();
 
   try {
@@ -94,11 +96,13 @@ connectWalletBtn.addEventListener("click", async () => {
     playSound("uiclick");
 
     if (!tokenIds.length) {
-      walletStatus.textContent = "No OnChainHoodies found in this wallet.";
+      walletStatus.textContent = "No OnChainHoodies found in this wallet - grab one to play as yourself.";
+      openseaBtn.classList.remove("hidden");
       connectWalletBtn.disabled = false;
       return;
     }
 
+    openseaBtn.classList.add("hidden");
     walletStatus.textContent = `${tokenIds.length} Hoodie${tokenIds.length === 1 ? "" : "s"} found - pick your fighter.`;
     await renderCharacterGrid(tokenIds);
   } catch (err) {
