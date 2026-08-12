@@ -7,6 +7,8 @@ const CHARACTER_SCALE = 1.4;
 // measured numbers behind it.
 const CROUCH_EXTRA_SCALE = 0.77;
 const PLATFORM_TILE_COUNT = 4;
+// How far the platform texture extends above GROUND_Y - see drawArena.
+const PLATFORM_TOP_OVERSCAN = 24;
 const ARENA_BACKGROUNDS = [
   loadImg("assets/backgrounds/arena-2.png"),
   loadImg("assets/backgrounds/arena-3.png"),
@@ -25,6 +27,9 @@ const BLOOD_SPOTS = [
   loadImg("assets/fx/blood-spot-1.png"),
   loadImg("assets/fx/blood-spot-2.png"),
   loadImg("assets/fx/blood-spot-3.png"),
+  loadImg("assets/fx/blood-spot-4.png"),
+  loadImg("assets/fx/blood-spot-5.png"),
+  loadImg("assets/fx/blood-spot-6.png"),
 ];
 const BLOOD_SPATTER_SHEET = loadImg("assets/fx/blood-spatter-sheet.png");
 const BLOOD_SPATTER_FRAME = 34;
@@ -59,6 +64,9 @@ const SHEETS = {
   slide: { img: loadImg("assets/sprites/slide.png"), frameSize: 62 },
   knockback: { img: loadImg("assets/sprites/knockback.png"), frameSize: 76 },
   uppercut: { img: loadImg("assets/sprites/uppercut.png"), frameSize: 78 },
+  // Post-match victory pose - only ever entered externally by game.js when
+  // a round ends, never by player input.
+  flex: { img: loadImg("assets/sprites/flex.png"), frameSize: 78 },
 };
 
 // Per-frame neck/collar anchor points, sampled directly from each sheet's
@@ -94,6 +102,8 @@ const HEAD_ANCHORS = {
   // 8-frame crouch-charge-into-upward-strike - same sampling method as
   // every other multi-frame sheet.
   uppercut: [{"x":37.8,"y":-7},{"x":38.0,"y":-7},{"x":38.8,"y":3},{"x":39.7,"y":9},{"x":38.9,"y":10},{"x":45.3,"y":-7},{"x":55.3,"y":-5},{"x":42.4,"y":-6}],
+  // 8-frame crouch-into-flex victory pose - same sampling method.
+  flex: [{"x":37.8,"y":-7},{"x":38.4,"y":-4},{"x":38.0,"y":5},{"x":38.0,"y":7},{"x":37.9,"y":7},{"x":41.3,"y":5},{"x":42.8,"y":-1},{"x":40.0,"y":-2}],
 };
 
 const ANIMS = {
@@ -123,6 +133,11 @@ const ANIMS = {
   // fighter.js.
   uppercut: { sheet: "uppercut", frames: 8, durationFrames: 32, loop: false },
   ko: { sheet: "death", frames: 8, durationFrames: 60, loop: false },
+  // Plays the crouch-into-flex sequence once, then frameIndex's own
+  // non-loop clamping holds on the final (fullest-flex) frame for however
+  // much longer the post-match display runs - not looped, so it doesn't
+  // visibly crouch back down and repeat mid-celebration.
+  flex: { sheet: "flex", frames: 8, durationFrames: 40, loop: false },
 };
 
 const TINTS = {
@@ -182,15 +197,6 @@ export function drawFighter(ctx, fighter, playerNum) {
   }
 
   if (isSpecial) {
-    const glowT = Math.sin((frame / 8) * Math.PI);
-    ctx.save();
-    ctx.globalAlpha = 0.35 * glowT;
-    ctx.filter = "brightness(3) saturate(0)";
-    ctx.beginPath();
-    ctx.arc(frameSize / 2, frameSize / 2, frameSize * 0.6, 0, Math.PI * 2);
-    ctx.fillStyle = "#ffd700";
-    ctx.fill();
-    ctx.restore();
     ctx.translate(frameSize / 2, frameSize / 2);
     ctx.scale(1.15, 1.15);
     ctx.translate(-frameSize / 2, -frameSize / 2);
@@ -258,7 +264,12 @@ export function drawArena(ctx, w, h) {
 
   if (PLATFORM_TILE.complete && PLATFORM_TILE.naturalWidth > 0) {
     if (!platformPattern) platformPattern = ctx.createPattern(PLATFORM_TILE, "repeat");
-    const platformH = h - GROUND_Y;
+    // Extends the wood texture upward past GROUND_Y (purely visual - the
+    // actual "ground" line everything else stands/calculates on doesn't
+    // move) so ground blood decals, which can reach a bit above GROUND_Y,
+    // land on visible floor instead of spilling out over the background.
+    const platformTop = GROUND_Y - PLATFORM_TOP_OVERSCAN;
+    const platformH = h - platformTop;
     // Non-uniform scale so exactly PLATFORM_TILE_COUNT tiles span the full
     // width with no partial tile cut off at the edge - keeps the seams
     // landing cleanly instead of stopping mid-tile.
@@ -266,7 +277,7 @@ export function drawArena(ctx, w, h) {
     const scaleY = platformH / PLATFORM_TILE.naturalHeight;
     ctx.imageSmoothingEnabled = false;
     ctx.save();
-    ctx.translate(0, GROUND_Y);
+    ctx.translate(0, platformTop);
     ctx.scale(scaleX, scaleY);
     ctx.fillStyle = platformPattern;
     ctx.fillRect(0, 0, w / scaleX, platformH / scaleY);

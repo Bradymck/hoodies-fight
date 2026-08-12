@@ -19,6 +19,7 @@ import {
 import { MAX_POWER, SLIDE, UPPERCUT } from "./fighter.js";
 import { playSound } from "./sound.js";
 import { createAIController } from "./ai.js";
+import { speakTaunt } from "./tts.js";
 
 const KEYMAP = {
   p1: {
@@ -50,6 +51,10 @@ const KEYMAP = {
 const SHAKE_ON_HIT = 6;
 const SHAKE_ON_SPECIAL = 12;
 const FLASH_ON_HIT = 0.25;
+// How long the winner's flex (and the loser's own finishing animation)
+// keeps playing after a round ends before actually moving on - long enough
+// for a short spoken victory line to finish, not just an instant flash.
+const RESULT_DISPLAY_FRAMES = 170;
 const SPATTER_TICKS_PER_FRAME = 3;
 const IMPACT_TICKS_PER_FRAME = 3;
 const MAX_GROUND_BLOOD = 90;
@@ -159,6 +164,12 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   let timeLeft = timeLimit;
   let frame = 0;
   let ended = false;
+  // Fully halts the render loop (set by the cleanup function this returns).
+  // Distinct from `ended`, which only stops combat logic - the result/flex
+  // display keeps animating and rendering for a while after `ended` flips.
+  let stopped = false;
+  let resultTimer = 0;
+  let roundWinner;
   let shake = 0;
   let flash = 0;
   const powerFullFired = { p1: false, p2: false };
@@ -191,13 +202,16 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     const attackerCenterX = attacker.x + BODY_CENTER_OFFSET;
 
     // Ground spots spray wide around the contact point instead of a tight
-    // cluster - several per hit, reads as a real gory mess, not a dot.
-    const spotCount = 3 + Math.floor(Math.random() * 3);
+    // cluster right under their feet - several per hit, reads as a real
+    // messy scatter. Y range now leans on the platform's top overscan
+    // (body.js) so a spot landing above GROUND_Y is still on visible floor,
+    // not spilling out over the background behind it.
+    const spotCount = 4 + Math.floor(Math.random() * 4);
     for (let i = 0; i < spotCount; i++) {
       groundBlood.push({
         imgIndex: pickBloodSpotVariant(),
-        x: defenderCenterX + (Math.random() - 0.5) * 70,
-        y: GROUND_Y + 2 + Math.random() * 14,
+        x: defenderCenterX + (Math.random() - 0.5) * 160,
+        y: GROUND_Y - 8 + Math.random() * 28,
         size: 14 + Math.random() * 20,
         rotation: Math.random() * Math.PI * 2,
       });
@@ -278,7 +292,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       const wasBlocking = defender.state === "block";
       attacker.hasHit = true;
       defender.takeDamage(box.damage, attacker.x, box.kind);
-      attacker.onLandedHit(box.isPunch);
+      attacker.onLandedHit(box.kind);
       attacker.lastEvent = `${attacker.state}-hit`;
       shake = Math.max(shake, SHAKE_ON_HIT);
       flash = Math.max(flash, FLASH_ON_HIT);
@@ -307,6 +321,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
 
     attacker.hasHit = true;
     defender.takeDamage(attacker.slideDamage, attacker.x, "slide");
+    attacker.onLandedHit("slide");
     const pushDir = defenderCenterX >= attackerCenterX ? 1 : -1;
     defender.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, defender.x + pushDir * SLIDE.knockback));
     attacker.lastEvent = "slide-hit";
@@ -332,6 +347,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
 
     attacker.hasHit = true;
     defender.takeDamage(attacker.uppercutDamage, attacker.x, "uppercut");
+    attacker.onLandedHit("uppercut");
     const pushDir = defenderCenterX >= attackerCenterX ? 1 : -1;
     defender.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, defender.x + pushDir * UPPERCUT.knockback));
     attacker.lastEvent = "uppercut-hit";
@@ -475,18 +491,55 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     return fighter.data.taunt ?? null;
   }
 
+  // Doesn't call onEnd right away - combat logic stops immediately (ended),
+  // but the actual round transition waits out RESULT_DISPLAY_FRAMES so the
+  // winner's flex and spoken victory line (and the loser's own finishing
+  // animation) get to play out instead of freezing the instant the round
+  // is decided.
   function endRound(winner) {
     if (ended) return;
     ended = true;
-    document.getElementById("result-title").textContent = winner ? `${winner.name} WINS!` : "DRAW";
-    const quote = winner ? pickVictoryQuote(winner) : null;
-    document.getElementById("result-quote").textContent = quote ? `"${quote}"` : "";
+    roundWinner = winner;
+    resultTimer = RESULT_DISPLAY_FRAMES;
+    const titleEl = document.getElementById("result-title");
+    const quoteEl = document.getElementById("result-quote");
+    if (winner) {
+      winner.setState("flex");
+      const quote = pickVictoryQuote(winner);
+      titleEl.textContent = `${winner.name} WINS!`;
+      quoteEl.textContent = quote ? `"${quote}"` : "";
+      speakTaunt(quote);
+    } else {
+      titleEl.textContent = "DRAW";
+      quoteEl.textContent = "";
+    }
     document.getElementById("result").classList.remove("hidden");
-    if (onEnd) onEnd(winner);
   }
 
   function loop() {
-    if (ended) return;
+    if (stopped) return;
+
+    if (ended) {
+      // Combat logic (input, hits, movement) is done - just keep the last
+      // pose animating (winner's flex, loser's own hitstun/KO) and the
+      // frame rendering instead of freezing on whatever frame the round
+      // happened to end on.
+      p1.stateT++;
+      p2.stateT++;
+      ctx.save();
+      drawArena(ctx, canvas.width, canvas.height);
+      drawFighter(ctx, p1, 1);
+      drawFighter(ctx, p2, 2);
+      ctx.restore();
+      resultTimer--;
+      if (resultTimer <= 0) {
+        if (onEnd) onEnd(roundWinner);
+        return;
+      }
+      requestAnimationFrame(loop);
+      return;
+    }
+
     frame++;
 
     p1.update(readInput(KEYMAP.p1));
@@ -608,13 +661,18 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       else endRound(p1Ratio > p2Ratio ? p1 : p2);
     }
 
-    if (!ended) requestAnimationFrame(loop);
+    // Always continues (unlike the old `if (!ended)` gate) - the very next
+    // tick is what lets the `if (ended)` branch above actually run and
+    // start the flex/result display instead of the round-ending frame just
+    // being the last one ever rendered.
+    if (!stopped) requestAnimationFrame(loop);
   }
 
   document.getElementById("timer").textContent = timeLeft;
   requestAnimationFrame(loop);
 
   return () => {
+    stopped = true;
     window.removeEventListener("keydown", keydown);
     window.removeEventListener("keyup", keyup);
   };

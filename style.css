@@ -55,11 +55,20 @@ h1 {
 #setup-content {
   position: relative;
   z-index: 1;
-  max-width: 800px;
+  max-width: min(96vw, 1400px);
   margin: 0 auto;
   padding: 40px 20px;
   background: linear-gradient(180deg, #0b0b0fcc 0%, #0b0b0f99 40%, #0b0b0fcc 100%);
   border-radius: 4px;
+}
+
+.hype {
+  font-family: "Bungee", "Courier New", monospace;
+  font-size: clamp(16px, 2.4vw, 24px);
+  letter-spacing: 0.04em;
+  color: #ffe066;
+  text-shadow: 0 0 8px #ffe06699;
+  margin: 0 0 20px;
 }
 
 .setup-form {
@@ -70,23 +79,30 @@ h1 {
   gap: 10px 4px;
 }
 
+.setup-form label {
+  font-size: 15px;
+  letter-spacing: 0.05em;
+}
+
 #setup input {
-  width: 70px;
+  width: 80px;
   margin: 0 8px;
   background: #1a1a22;
   color: #fff;
   border: 1px solid #444;
-  padding: 4px;
+  padding: 6px;
   font-family: inherit;
+  font-size: 15px;
 }
 
 #setup button {
-  padding: 6px 18px;
+  padding: 10px 24px;
   background: #3ddc3d;
   color: #0b0b0f;
   border: none;
   cursor: pointer;
-  font-weight: bold;
+  font-family: "Bungee", "Courier New", monospace;
+  font-size: 16px;
   letter-spacing: 0.1em;
   box-shadow: 0 0 0 2px #0b0b0f, 0 0 12px #3ddc3d88;
   transition: transform 0.1s ease-out;
@@ -104,14 +120,14 @@ h1 {
 }
 
 #connect-wallet-btn {
-  padding: 8px 20px;
+  padding: 12px 26px;
   background: transparent;
   color: #3ddc3d;
   border: 2px solid #3ddc3d;
   cursor: pointer;
-  font-weight: bold;
-  font-family: inherit;
-  letter-spacing: 0.05em;
+  font-family: "Bungee", "Courier New", monospace;
+  font-size: 15px;
+  letter-spacing: 0.03em;
   box-shadow: 0 0 12px #3ddc3d44;
   transition: transform 0.1s ease-out;
 }
@@ -128,9 +144,14 @@ h1 {
 }
 
 #wallet-status {
-  font-size: 12px;
-  opacity: 0.8;
+  font-size: 14px;
+  opacity: 0.85;
   min-height: 1.2em;
+}
+
+#setup-status {
+  font-size: 14px;
+  opacity: 0.85;
 }
 
 /* OpenSea's own brand blue rather than the site's green - reads as a
@@ -162,8 +183,9 @@ h1 {
 }
 
 .select-title {
-  font-size: 13px;
-  letter-spacing: 0.15em;
+  font-family: "Bungee", "Courier New", monospace;
+  font-size: 15px;
+  letter-spacing: 0.12em;
   color: #ffe066;
   text-shadow: 0 0 6px #ffe06699;
   margin-bottom: 10px;
@@ -216,7 +238,7 @@ h1 {
 }
 
 #arena {
-  max-width: 800px;
+  max-width: min(96vw, 1500px);
   margin: 16px auto;
   position: relative;
 }
@@ -237,14 +259,14 @@ h1 {
 
 .healthbar,
 .powerbar {
-  height: 16px;
+  height: 22px;
   background: #161620;
   border: 2px solid #555;
   box-shadow: inset 0 0 0 1px #000;
 }
 
 .powerbar {
-  height: 8px;
+  height: 11px;
 }
 
 .health-fill {
@@ -272,8 +294,9 @@ h1 {
 }
 
 #timer {
-  width: 44px;
-  font-size: 22px;
+  width: 60px;
+  font-family: "Bungee", "Courier New", monospace;
+  font-size: 30px;
   color: #ffe066;
   text-shadow: 0 0 6px #ffe06699;
 }
@@ -284,14 +307,14 @@ h1 {
   justify-content: space-between;
   align-items: center;
   gap: 2px 8px;
-  font-size: 12px;
-  opacity: 0.85;
+  font-size: 16px;
+  opacity: 0.9;
   margin-bottom: 4px;
   letter-spacing: 0.05em;
 }
 
 #round-info {
-  font-size: 11px;
+  font-size: 14px;
   color: #ffe066;
   opacity: 0.9;
   letter-spacing: 0.1em;
@@ -307,7 +330,7 @@ canvas {
   box-shadow: 0 0 0 4px #0b0b0f, 0 0 24px #3ddc3d22;
   image-rendering: pixelated;
   width: 100%;
-  max-width: 800px;
+  max-width: min(96vw, 1500px);
   aspect-ratio: 800 / 360;
   display: block;
 }
@@ -323,8 +346,8 @@ canvas {
   color: #000;
   padding: 6px 10px;
   border-radius: 6px;
-  max-width: 190px;
-  font-size: 12px;
+  max-width: 240px;
+  font-size: 14px;
   box-shadow: 0 2px 10px #0008;
 }
 
@@ -350,33 +373,35 @@ canvas {
 
 #result {
   position: absolute;
-  top: 45%;
+  top: 12%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(0, 0, 0, 0.85);
-  padding: 12px 28px;
-  border: 2px solid #ffe066;
-  box-shadow: 0 0 20px #ffe06666;
-  animation: pop-in 0.35s ease-out;
-  max-width: 420px;
+  animation: pop-in 0.3s ease-out;
+  max-width: 90%;
   text-align: center;
 }
 
 #result-title {
-  font-size: 32px;
-  letter-spacing: 0.1em;
+  font-family: "Bungee", "Courier New", monospace;
+  font-size: clamp(28px, 5vw, 48px);
+  font-weight: bold;
+  letter-spacing: 0.06em;
+  color: #ffe066;
+  text-shadow: 0 0 12px #ffe066cc, 0 0 30px #ffe06666;
 }
 
 #result-quote {
-  font-size: 13px;
+  font-size: 16px;
   font-style: italic;
-  opacity: 0.75;
-  margin-top: 8px;
+  color: #ffe066;
+  opacity: 0.8;
+  margin-top: 6px;
   letter-spacing: normal;
+  text-shadow: 0 0 8px #ffe06699;
 }
 
 .controls {
-  font-size: 11px;
-  opacity: 0.6;
-  margin-top: 8px;
+  font-size: 14px;
+  opacity: 0.7;
+  margin-top: 10px;
 }

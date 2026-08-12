@@ -63,7 +63,7 @@ startBtn.addEventListener("click", async () => {
   const id2 = document.getElementById("p2-id").value;
 
   startBtn.disabled = true;
-  setupStatus.textContent = "Loading Hoodies...";
+  setupStatus.textContent = "Suiting up...";
   // initSound() must be kicked off from this click handler - browsers block
   // audio until a real user gesture, and this is the closest one we get.
   const soundReady = initSound();
@@ -75,7 +75,10 @@ startBtn.addEventListener("click", async () => {
       soundReady,
     ]);
     playSound("uiclick");
-    await startMatch(data1, data2);
+    // Free play fights an AI opponent too, same as the wallet flow - it was
+    // quietly requiring a second person on the same keyboard to do
+    // anything, which isn't really "free play" for one person.
+    await startMatch(data1, data2, { p2AI: true });
   } catch (err) {
     setupStatus.textContent = err.message;
     startBtn.disabled = false;
@@ -84,19 +87,19 @@ startBtn.addEventListener("click", async () => {
 
 connectWalletBtn.addEventListener("click", async () => {
   connectWalletBtn.disabled = true;
-  walletStatus.textContent = "Connecting...";
+  walletStatus.textContent = "Connecting wallet...";
   openseaBtn.classList.add("hidden");
   const soundReady = initSound();
 
   try {
     const address = await connectWallet();
-    walletStatus.textContent = "Looking up your Hoodies...";
+    walletStatus.textContent = "Scanning the chain for your Hoodies...";
     const tokenIds = await fetchWalletHoodies(address);
     await soundReady;
     playSound("uiclick");
 
     if (!tokenIds.length) {
-      walletStatus.textContent = "No OnChainHoodies found in this wallet - grab one to play as yourself.";
+      walletStatus.textContent = "No Hoodies in this wallet yet - grab one and come back swinging.";
       openseaBtn.classList.remove("hidden");
       connectWalletBtn.disabled = false;
       return;
@@ -141,7 +144,7 @@ async function renderCharacterGrid(tokenIds) {
 
 async function pickFighter(tokenId) {
   characterSelect.classList.add("hidden");
-  walletStatus.textContent = "Loading your fighter...";
+  walletStatus.textContent = "Suiting up...";
   try {
     const [playerData, aiData] = await Promise.all([
       loadFighterData(tokenId),
@@ -171,7 +174,6 @@ const ROUNDS_TO_WIN = 2;
 // draws shrink the clock each retry so two evenly-matched players can't
 // stall the match forever; sudden-death floor guarantees it resolves.
 const DRAW_RETRY_TIME_LIMITS = [45, 30, 15];
-const ROUND_RESULT_PAUSE_MS = 2200;
 
 async function runMatch(data1, data2, canvas, ctx, { p2AI = false } = {}) {
   const wins = { p1: 0, p2: 0 };
@@ -234,15 +236,14 @@ async function runMatch(data1, data2, canvas, ctx, { p2AI = false } = {}) {
       drawStreak++;
     }
 
-    const matchWinner = wins.p1 >= ROUNDS_TO_WIN ? p1 : wins.p2 >= ROUNDS_TO_WIN ? p2 : null;
-    if (matchWinner) {
-      const title = document.getElementById("result-title");
-      title.textContent = `${matchWinner.name} WINS THE MATCH! (${wins.p1}-${wins.p2})`;
-      break;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, ROUND_RESULT_PAUSE_MS));
+    // game.js already held the result on screen (winner's flex + spoken
+    // taunt) for its own linger window before resolving this promise, so
+    // there's nothing left to wait for here - just clear it and move on.
     document.getElementById("result").classList.add("hidden");
+
+    const matchWinner = wins.p1 >= ROUNDS_TO_WIN ? p1 : wins.p2 >= ROUNDS_TO_WIN ? p2 : null;
+    if (matchWinner) break;
+
     if (winner) roundNum++;
     // A draw replays the same round number rather than advancing it.
   }

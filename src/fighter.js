@@ -12,8 +12,11 @@ const KICK = { duration: 34, activeStart: 10, activeEnd: 22, damage: 10, range: 
 // frames, then game.js reads "special-release" off lastEvent and spawns a
 // projectile of its own that travels and hits independently. `duration`
 // leaves a few recovery frames after release for the throw's follow-through
-// before control returns.
-const SPECIAL = { duration: 42, release: 30, damage: 25, cost: 50 };
+// before control returns. damage bumped well past kick's (10) - at the old
+// value (25, only ~2.5x kick before archetype multipliers) it didn't feel
+// meaningfully different from a kick landing, despite costing 50 power and
+// a full cast animation to throw.
+const SPECIAL = { duration: 42, release: 30, damage: 32, cost: 50 };
 const HITSTUN_FRAMES = 24;
 // Tall/long enough that the arc actually clears over the other fighter's
 // full standing height (~109px at CHARACTER_SCALE) instead of just a hop in
@@ -45,8 +48,15 @@ const KNOCKBACK_DURATION = 28;
 // stand closer than 68px apart in the first place, so a 60px range could
 // never reach anyone even standing right next to you).
 export const UPPERCUT = { duration: 32, activeStart: 16, activeEnd: 30, damage: 14, range: 80, height: 90, knockback: 100 };
-const PUNCH_POWER_GAIN = 12;
-const PASSIVE_REGEN_PER_FRAME = 0.15; // ~9/sec at 60fps
+// Power now mostly comes from actually fighting - landing a hit or holding
+// a block - rather than sitting still. Passive trickle is deliberately
+// slow (was 0.15/frame, ~9/sec - fast enough that special was basically
+// always available for free) so the special reads as something you earn,
+// not something you wait out. special itself grants nothing back (already
+// the most expensive thing you can do) - the resource wall is the point.
+const PASSIVE_REGEN_PER_FRAME = 0.03; // ~1.8/sec at 60fps
+const POWER_GAIN = { punch: 10, kick: 12, slide: 14, uppercut: 16, special: 0 };
+const BLOCK_POWER_GAIN = 8;
 
 // One mechanical trait per Hood archetype - matches their own "Builders,
 // Collectors, Flippers and HODLers" framing directly rather than inventing
@@ -269,10 +279,14 @@ export class Fighter {
     return UPPERCUT.damage * this.archetype.damageMult;
   }
 
-  onLandedHit(isPunch) {
-    if (isPunch) {
-      this.power = Math.min(MAX_POWER, this.power + PUNCH_POWER_GAIN);
-    }
+  // kind is whatever attackHitbox()/updateSlide/checkUppercutHit call this
+  // with ("punch"/"kick"/"slide"/"uppercut"/"special") - landing any real
+  // hit builds power now, not just a punch, so kick/slide/uppercut (which
+  // all cost power - see input handling above, or in slide/uppercut's case
+  // spend the risk of missing) get some of it back on a successful hit.
+  onLandedHit(kind) {
+    const gain = POWER_GAIN[kind] ?? 0;
+    if (gain > 0) this.power = Math.min(MAX_POWER, this.power + gain);
   }
 
   takeDamage(amount, fromX, kind) {
@@ -282,6 +296,10 @@ export class Fighter {
     // nothing against it makes that the actual answer instead of a false one.
     if (this.state === "block" && kind !== "special" && kind !== "slide") {
       this.health -= amount * 0.2 * this.archetype.blockMult;
+      // A successful block is real defensive skill, not just standing
+      // there - rewarding it with power gives blocking a reason to exist
+      // beyond just "take less damage this once".
+      this.power = Math.min(MAX_POWER, this.power + BLOCK_POWER_GAIN);
       this.lastEvent = "block-taken";
     } else {
       this.health -= amount;
