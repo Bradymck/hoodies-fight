@@ -184,9 +184,12 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
       if (shake < 0.5) shake = 0;
     }
     drawArena(ctx, canvas.width, canvas.height);
-    for (const decal of groundBlood) drawBloodSpot(ctx, decal);
     drawFighter(ctx, p1, 1);
     drawFighter(ctx, p2, 2);
+    // Ground blood draws in front of both fighters, not underneath - at
+    // close range a lunging attack sprite can visually overlap the
+    // defender's spot and hide/misattribute a decal drawn below them.
+    for (const decal of groundBlood) drawBloodSpot(ctx, decal);
     for (let i = spatters.length - 1; i >= 0; i--) {
       const s = spatters[i];
       const spriteFrame = Math.floor(s.t / SPATTER_TICKS_PER_FRAME);
