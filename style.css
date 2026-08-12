@@ -1,0 +1,124 @@
+body {
+  background: #0b0b0f;
+  color: #e8e8e8;
+  font-family: "Courier New", monospace;
+  text-align: center;
+  margin: 0;
+  padding: 24px;
+}
+
+h1 {
+  letter-spacing: 0.2em;
+  margin-bottom: 16px;
+}
+
+#setup input {
+  width: 70px;
+  margin: 0 8px;
+  background: #1a1a22;
+  color: #fff;
+  border: 1px solid #444;
+  padding: 4px;
+}
+
+#setup button {
+  margin-left: 16px;
+  padding: 6px 18px;
+  background: #e8e8e8;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+  letter-spacing: 0.1em;
+}
+
+.hidden {
+  display: none !important;
+}
+
+#arena {
+  max-width: 800px;
+  margin: 16px auto;
+  position: relative;
+}
+
+.hud {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.healthbar {
+  flex: 1;
+  height: 18px;
+  background: #222;
+  border: 2px solid #666;
+}
+
+.health-fill {
+  height: 100%;
+  width: 100%;
+  background: #3ddc3d;
+  transition: width 0.15s ease-out;
+}
+
+#p1-health {
+  margin-left: auto;
+}
+
+#timer {
+  width: 40px;
+  font-size: 20px;
+}
+
+.names {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+canvas {
+  background: #1b1330;
+  border: 2px solid #444;
+  image-rendering: pixelated;
+  width: 100%;
+  display: block;
+}
+
+.taunt {
+  position: absolute;
+  top: 40px;
+  background: #fff;
+  color: #000;
+  padding: 6px 10px;
+  border-radius: 6px;
+  max-width: 220px;
+  font-size: 12px;
+}
+
+#taunt-p1 {
+  left: 20px;
+}
+
+#taunt-p2 {
+  right: 20px;
+}
+
+#result {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 32px;
+  letter-spacing: 0.1em;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 12px 28px;
+}
+
+.controls {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-top: 8px;
+}

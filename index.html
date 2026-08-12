@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Hood Fighter</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <h1>HOOD FIGHTER</h1>
+
+  <div id="setup">
+    <label>P1 Hoodie ID <input id="p1-id" type="number" value="125" /></label>
+    <label>P2 Hoodie ID <input id="p2-id" type="number" value="120" /></label>
+    <button id="start-btn">FIGHT</button>
+    <p id="setup-status"></p>
+  </div>
+
+  <div id="arena" class="hidden">
+    <div class="hud">
+      <div class="healthbar"><div id="p1-health" class="health-fill"></div></div>
+      <div id="timer">60</div>
+      <div class="healthbar"><div id="p2-health" class="health-fill"></div></div>
+    </div>
+    <div class="names">
+      <span id="p1-name"></span>
+      <span id="p2-name"></span>
+    </div>
+    <canvas id="canvas" width="800" height="360"></canvas>
+    <div id="taunt-p1" class="taunt hidden"></div>
+    <div id="taunt-p2" class="taunt hidden"></div>
+    <div id="result" class="hidden"></div>
+    <p class="controls">P1: A/D move, S block, F punch, G kick &nbsp;|&nbsp; P2: Left/Right move, Down block, K punch, L kick</p>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
