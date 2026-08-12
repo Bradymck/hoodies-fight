@@ -9,8 +9,22 @@ const CLIPS = {
   uiclick: "assets/sounds/uiclick.mp3",
 };
 
+const TRACKS = [
+  "assets/music/garbage-world.mp3",
+  "assets/music/lets-go.mp3",
+  "assets/music/missed-calls.mp3",
+  "assets/music/muppet-trash.mp3",
+  "assets/music/trash-panda.mp3",
+  "assets/music/when-trash-cans-dance.mp3",
+  "assets/music/waste-management.mp3",
+];
+
 let ctx = null;
 const buffers = {};
+// Music streams through a plain <audio> element instead of decoded Web
+// Audio buffers - these are full tracks (3-5MB each), not short SFX, so
+// decoding them all into memory up front would be wasteful.
+let musicEl = null;
 
 async function loadBuffer(url) {
   const res = await fetch(url);
@@ -62,4 +76,27 @@ export function playSound(name, { volume = 0.7, rate = 1 } = {}) {
   gain.gain.value = volume;
   source.connect(gain).connect(ctx.destination);
   source.start();
+}
+
+// Picks a new random track each call so a rematch doesn't repeat the same
+// song - swaps musicEl's src directly rather than creating a new element
+// each time, so there's only ever one music track playing.
+export function playRandomTrack({ volume = 0.35 } = {}) {
+  if (!musicEl) {
+    musicEl = new Audio();
+    musicEl.loop = true;
+  }
+  let next = TRACKS[Math.floor(Math.random() * TRACKS.length)];
+  if (TRACKS.length > 1 && next === musicEl.dataset.src) {
+    next = TRACKS[(TRACKS.indexOf(next) + 1) % TRACKS.length];
+  }
+  musicEl.dataset.src = next;
+  musicEl.src = next;
+  musicEl.volume = volume;
+  musicEl.currentTime = 0;
+  musicEl.play().catch((err) => console.warn("[sound] music playback failed:", err));
+}
+
+export function stopMusic() {
+  if (musicEl) musicEl.pause();
 }

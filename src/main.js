@@ -1,7 +1,7 @@
 import { loadFighterData } from "./api.js";
 import { Fighter } from "./fighter.js";
 import { createGame } from "./game.js";
-import { initSound, playSound } from "./sound.js";
+import { initSound, playSound, playRandomTrack } from "./sound.js";
 
 const startBtn = document.getElementById("start-btn");
 const setupStatus = document.getElementById("setup-status");
@@ -40,6 +40,7 @@ startBtn.addEventListener("click", async () => {
     setTimeout(() => {
       document.getElementById("taunt-p1").classList.add("hidden");
       document.getElementById("taunt-p2").classList.add("hidden");
+      playRandomTrack();
       createGame({ ctx, canvas, p1, p2 });
     }, 2500);
   } catch (err) {
