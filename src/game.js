@@ -50,10 +50,13 @@ const FLASH_ON_HIT = 0.25;
 const SPATTER_TICKS_PER_FRAME = 3;
 const IMPACT_TICKS_PER_FRAME = 3;
 const MAX_GROUND_BLOOD = 90;
-// Mid-air splats (splatExtras) age out and fade rather than sticking around
-// forever - unlike groundBlood, which is meant to pool and stay.
-const SPLAT_EXTRA_LIFETIME_FRAMES = 50;
-const SPLAT_EXTRA_FADE_FRAMES = 15;
+// Mid-air splats (splatExtras) vanish almost immediately rather than
+// sticking around - unlike groundBlood, which is meant to pool and stay.
+// Roughly matches how long the animated spatter burst itself lives
+// (BLOOD_SPATTER_TOTAL_FRAMES * SPATTER_TICKS_PER_FRAME = 15 frames), so it
+// doesn't outlast the effect it's layered behind.
+const SPLAT_EXTRA_LIFETIME_FRAMES = 14;
+const SPLAT_EXTRA_FADE_FRAMES = 5;
 // How fast the special's projectile crosses the arena - covers the full
 // ~700px play area in a bit over a second at 60fps, fast enough to read as
 // a real threat but slow enough a jump can still dodge it.
