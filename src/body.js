@@ -139,13 +139,17 @@ export function drawFighter(ctx, fighter, playerNum) {
     ctx.scale(-1, 1);
   }
 
+  const isCrouch = state === "crouch";
+
   // The crouch source art draws the character filling notably more of its
   // frame than every other sheet (measured ~69% of frame width vs ~47% for
   // idle/walk/etc), so at the same CHARACTER_SCALE it read as the character
-  // visibly growing on the squat instead of just hunching down. Scaled down
-  // around the frame's bottom-center - feet stay planted on GROUND_Y and the
-  // pose stays horizontally centered, only the silhouette itself shrinks.
-  if (state === "crouch") {
+  // visibly growing on the squat instead of just hunching down. Only the
+  // body sprite is scaled down here (in its own save/restore) - the head is
+  // drawn afterward at its normal size, just repositioned to follow, so
+  // ducking shrinks the body without also shrinking the head.
+  ctx.save();
+  if (isCrouch) {
     ctx.translate(frameSize / 2, frameSize);
     ctx.scale(CROUCH_EXTRA_SCALE, CROUCH_EXTRA_SCALE);
     ctx.translate(-frameSize / 2, -frameSize);
@@ -181,14 +185,27 @@ export function drawFighter(ctx, fighter, playerNum) {
     );
   }
   ctx.filter = "none";
+  ctx.restore();
 
-  // Head is drawn on top of the body, in front of the collar. The head art
-  // itself is now V-cropped at the bottom (see api.js cropToHeadShape) so
-  // its neck point should land close to the body sprite's own collar V
-  // instead of overlapping the shoulders.
+  // Head is drawn on top of the body, in front of the collar, at its normal
+  // (unshrunk) size - see isCrouch above. The head art itself is now
+  // V-cropped at the bottom (see api.js cropToHeadShape) so its neck point
+  // should land close to the body sprite's own collar V instead of
+  // overlapping the shoulders.
   if (headImg && headImg.complete && state !== "ko") {
     const anchors = HEAD_ANCHORS[anim.sheet];
-    const anchor = anchors ? anchors[frame % anchors.length] : { x: frameSize / 2, y: 10 };
+    let anchor = anchors ? anchors[frame % anchors.length] : { x: frameSize / 2, y: 10 };
+    // Anchors are sampled against the crouch sheet's own (unscaled) pixels,
+    // so they need the same pivot transform applied above to still land on
+    // the now-shrunk body instead of where the head used to sit.
+    if (isCrouch) {
+      const pivotX = frameSize / 2;
+      const pivotY = frameSize;
+      anchor = {
+        x: (anchor.x - pivotX) * CROUCH_EXTRA_SCALE + pivotX,
+        y: (anchor.y - pivotY) * CROUCH_EXTRA_SCALE + pivotY,
+      };
+    }
 
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(
