@@ -2,9 +2,13 @@ export const MOVE_SPEED = 3;
 export const MAX_HEALTH = 100;
 export const MAX_POWER = 100;
 
-const PUNCH = { duration: 22, activeStart: 6, activeEnd: 14, damage: 6, range: 46 };
-const KICK = { duration: 34, activeStart: 10, activeEnd: 22, damage: 10, range: 58, cost: 20 };
-const SPECIAL = { duration: 40, activeStart: 14, activeEnd: 26, damage: 25, range: 65, cost: 50 };
+// Ranges need to clear MIN_FIGHTER_GAP (game.js) - the closest the solid-body
+// collision will ever let two fighters stand - or the attack could never
+// connect at point-blank range. Sprite bodies render ~60px wide at full
+// scale, so the enforced gap is ~68px; these all clear it with margin.
+const PUNCH = { duration: 22, activeStart: 6, activeEnd: 14, damage: 6, range: 74 };
+const KICK = { duration: 34, activeStart: 10, activeEnd: 22, damage: 10, range: 84, cost: 20 };
+const SPECIAL = { duration: 40, activeStart: 14, activeEnd: 26, damage: 25, range: 94, cost: 50 };
 const HITSTUN_FRAMES = 24;
 const JUMP_DURATION = 36;
 const JUMP_HEIGHT = 55;

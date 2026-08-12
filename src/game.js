@@ -42,26 +42,44 @@ const SHAKE_ON_SPECIAL = 12;
 const FLASH_ON_HIT = 0.25;
 const SPATTER_TICKS_PER_FRAME = 3;
 const MAX_GROUND_BLOOD = 90;
-// Solid-body distance the two fighters can never close past - smaller than
-// every attack's range (46/58/65), so standing at the wall still lets every
-// move connect.
-const MIN_FIGHTER_GAP = 40;
+// Solid-body distance the two fighters can never close past - matches the
+// actual rendered sprite width (~60px at full scale) so their bodies visibly
+// meet without overlapping, not just an arbitrary small number. Attack
+// ranges (fighter.js) are all sized to clear this with margin.
+const MIN_FIGHTER_GAP = 68;
 const ARENA_MIN_X = 50;
 const ARENA_MAX_X = 750;
 
 // Pushes both fighters apart symmetrically whenever they'd overlap, instead
 // of each fighter unilaterally checking only its own (static) facing - that
 // old approach didn't account for the opponent's own movement and let them
-// slide past each other.
+// slide past each other. Clamping each side to the arena bounds
+// independently after a naive symmetric push isn't enough on its own: if one
+// side is pinned against a wall, its half of the push gets silently
+// swallowed by the clamp and the other side never receives it, letting the
+// pair stay overlapped (or, at the extreme, the wall-pinned one gets read as
+// "off" its own clamped position because the other overshoots). Instead each
+// side's shortfall against the wall is measured and handed to the other side
+// so the full gap is still enforced.
 function resolveCollision(a, b) {
   const dx = b.x - a.x;
   if (Math.abs(dx) >= MIN_FIGHTER_GAP) return;
   const dir = dx >= 0 ? 1 : -1;
   const overlap = MIN_FIGHTER_GAP - Math.abs(dx);
-  a.x -= (dir * overlap) / 2;
-  b.x += (dir * overlap) / 2;
-  a.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, a.x));
-  b.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, b.x));
+  const halfPush = (dir * overlap) / 2;
+
+  const aTarget = a.x - halfPush;
+  const bTarget = b.x + halfPush;
+  const aClamped = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, aTarget));
+  const bClamped = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, bTarget));
+  // Whatever either side couldn't take because it hit a wall gets handed to
+  // the other side, so the full gap is still enforced even when one fighter
+  // is pinned - a one-directional version of this let the pinned side's
+  // shortfall just vanish, silently leaving the pair overlapped.
+  const aShortfall = aTarget - aClamped;
+  const bShortfall = bTarget - bClamped;
+  a.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, aClamped - bShortfall));
+  b.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, bClamped - aShortfall));
 }
 
 const SCROLL_KEYS = new Set([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
@@ -119,17 +137,23 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60 }) {
     }
     while (groundBlood.length > MAX_GROUND_BLOOD) groundBlood.shift();
 
-    // Anchored on the defender (where the hit actually lands), offset
-    // toward wherever the attacker actually is - NOT the defender's own
-    // (static, never-changing) facing, which pointed the wrong way whenever
-    // the real attacker was standing behind that fixed direction. Height
-    // varies by attack type so a kick lands lower than a punch/special.
+    // Anchored between the two fighters, offset toward wherever the attacker
+    // actually is - NOT the defender's own (static, never-changing) facing,
+    // which pointed the wrong way whenever the real attacker was standing
+    // behind that fixed direction. Scales with the actual gap between them
+    // (~68-94px depending on the move) instead of a small fixed nudge, or it
+    // just renders on top of the defender instead of at the real contact
+    // point. Biased 40% of the way rather than a true 50/50 midpoint - the
+    // attacker's own lunge animation pushes them visually closer than their
+    // logical x, so a true midpoint reads as skewed toward the attacker.
+    // Height varies by attack type so a kick lands lower than a punch/special.
+    const gapX = Math.abs(attacker.x - defender.x);
     const towardAttacker = attacker.x >= defender.x ? 1 : -1;
     const contactHeight = attacker.state === "kick" ? GROUND_Y - 20 : GROUND_Y - 50;
     const burstCount = 2 + Math.floor(Math.random() * 2);
     for (let i = 0; i < burstCount; i++) {
       spatters.push({
-        x: defender.x + towardAttacker * (6 + Math.random() * 10),
+        x: defender.x + towardAttacker * (gapX * 0.4 + (Math.random() - 0.5) * 10),
         y: contactHeight + (Math.random() - 0.5) * 16,
         t: -Math.floor(Math.random() * 3),
       });
