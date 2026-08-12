@@ -10,6 +10,7 @@ const JUMP_DURATION = 36;
 const JUMP_HEIGHT = 55;
 const JUMP_COST = 15;
 const PUNCH_POWER_GAIN = 12;
+const PASSIVE_REGEN_PER_FRAME = 0.15; // ~9/sec at 60fps
 
 // One mechanical trait per Hood archetype - matches their own "Builders,
 // Collectors, Flippers and HODLers" framing directly rather than inventing
@@ -74,6 +75,12 @@ export class Fighter {
     }
 
     this.stateT++;
+
+    // Power slowly refills on its own except while jumping or kicking -
+    // those are the two moves that spend it, so no free regen mid-spend.
+    if (this.state !== "jump" && this.state !== "kick") {
+      this.power = Math.min(MAX_POWER, this.power + PASSIVE_REGEN_PER_FRAME);
+    }
 
     if (["punch", "kick", "special", "hitstun"].includes(this.state)) {
       const durations = {
