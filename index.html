@@ -9,11 +9,16 @@
   <h1>HOOD VS HOOD</h1>
 
   <div id="setup">
-    <label>P1 Hoodie ID <input id="p1-id" type="number" value="125" /></label>
-    <label>P2 Hoodie ID <input id="p2-id" type="number" value="120" /></label>
-    <button id="start-btn">FIGHT</button>
-    <p id="setup-status"></p>
-    <p class="controls">Builder = harder hits &nbsp;|&nbsp; Flipper = faster &nbsp;|&nbsp; Hodler = more health &nbsp;|&nbsp; Collector = blocks better &nbsp;|&nbsp; rare traits add a small health bonus</p>
+    <video id="setup-bg" autoplay loop muted playsinline>
+      <source src="assets/backgrounds/setup-bg.mp4" type="video/mp4" />
+    </video>
+    <div id="setup-content">
+      <label>P1 Hoodie ID <input id="p1-id" type="number" value="125" /></label>
+      <label>P2 Hoodie ID <input id="p2-id" type="number" value="120" /></label>
+      <button id="start-btn">FIGHT</button>
+      <p id="setup-status"></p>
+      <p class="controls">Builder = harder hits &nbsp;|&nbsp; Flipper = faster &nbsp;|&nbsp; Hodler = more health &nbsp;|&nbsp; Collector = blocks better &nbsp;|&nbsp; rare traits add a small health bonus</p>
+    </div>
   </div>
 
   <div id="arena" class="hidden">
