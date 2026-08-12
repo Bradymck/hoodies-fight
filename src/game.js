@@ -14,12 +14,12 @@ import { MAX_POWER } from "./fighter.js";
 import { playSound } from "./sound.js";
 
 const KEYMAP = {
-  p1: { left: "a", right: "d", block: "s", crouch: "c", jump: " ", punch: "f", kick: "g", special: "r" },
+  p1: { left: "a", right: "d", block: "c", crouch: "s", jump: " ", punch: "f", kick: "g", special: "r" },
   p2: {
     left: "arrowleft",
     right: "arrowright",
-    block: "arrowdown",
-    crouch: "m",
+    block: "m",
+    crouch: "arrowdown",
     jump: "arrowup",
     punch: "k",
     kick: "l",
