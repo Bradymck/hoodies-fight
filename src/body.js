@@ -37,6 +37,14 @@ const BLOOD_SPLAT_EXTRA_VARIANTS = 3;
 const HEAD_POP_IMG = loadImg("assets/fx/head-pop.png");
 export const HEAD_POP_DURATION = 30;
 
+// Chest decal, stamped at draw time rather than baked into every sprite
+// frame - piggybacks on the existing per-frame HEAD_ANCHORS (same x, offset
+// down to chest height) instead of needing its own full anchor table.
+const ROBINHOOD_LOGO = loadImg("assets/fx/robinhood-logo.png");
+const ROBINHOOD_LOGO_WIDTH = 15;
+const ROBINHOOD_LOGO_ASPECT = 300 / 224;
+const ROBINHOOD_LOGO_Y_OFFSET = 23;
+
 const SHEETS = {
   idle: { img: loadImg("assets/sprites/idle.png"), frameSize: 78 },
   walk: { img: loadImg("assets/sprites/walk.png"), frameSize: 86 },
@@ -46,6 +54,7 @@ const SHEETS = {
   hurt: { img: loadImg("assets/sprites/hurt.png"), frameSize: 78 },
   death: { img: loadImg("assets/sprites/death.png"), frameSize: 86 },
   crouch: { img: loadImg("assets/sprites/crouch.png"), frameSize: 70 },
+  block: { img: loadImg("assets/sprites/block.png"), frameSize: 78 },
 };
 
 // Per-frame neck/collar anchor points, sampled directly from each sheet's
@@ -68,12 +77,13 @@ const HEAD_ANCHORS = {
   // the raw sample - the hunch leans the head toward the front, not the
   // trailing/rear edge the raw collar point sat at.
   crouch: [{"x":40,"y":4}],
+  block: [{"x":37.8,"y":-7},{"x":37.8,"y":-7},{"x":38.6,"y":-7},{"x":38.6,"y":-7},{"x":38.6,"y":-7},{"x":39.0,"y":-7},{"x":38.6,"y":-7},{"x":39.0,"y":-7}],
 };
 
 const ANIMS = {
   idle: { sheet: "idle", frames: 8, cyclesPerSec: 1.1, loop: true },
   walk: { sheet: "walk", frames: 8, cyclesPerSec: 2, loop: true },
-  block: { sheet: "idle", frames: 1, cyclesPerSec: 0, loop: true },
+  block: { sheet: "block", frames: 8, cyclesPerSec: 1.3, loop: true },
   crouch: { sheet: "crouch", frames: 1, cyclesPerSec: 0, loop: true },
   jump: { sheet: "jump", frames: 8, durationFrames: 36, loop: false },
   punch: { sheet: "attack", frames: 8, durationFrames: 22, loop: false },
@@ -156,6 +166,17 @@ export function drawFighter(ctx, fighter, playerNum) {
     );
   }
   ctx.filter = "none";
+
+  // Chest logo draws on top of the body but under the head - a decal on the
+  // hoodie, not on the face.
+  if (ROBINHOOD_LOGO.complete && ROBINHOOD_LOGO.naturalWidth > 0 && state !== "ko") {
+    const anchors = HEAD_ANCHORS[anim.sheet];
+    const anchor = anchors ? anchors[frame % anchors.length] : { x: frameSize / 2, y: 10 };
+    const w = ROBINHOOD_LOGO_WIDTH;
+    const h = w * ROBINHOOD_LOGO_ASPECT;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(ROBINHOOD_LOGO, anchor.x - w / 2, anchor.y + ROBINHOOD_LOGO_Y_OFFSET, w, h);
+  }
 
   // Head is drawn on top of the body, in front of the collar. The head art
   // itself is now V-cropped at the bottom (see api.js cropToHeadShape) so
