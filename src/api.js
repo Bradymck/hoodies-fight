@@ -11,9 +11,23 @@ export async function fetchHoodTalk(tokenId) {
     const res = await fetch(`${BASE}/token/${tokenId}/hood-talk`);
     if (!res.ok) return null;
     const data = await res.json();
-    return data?.talk?.text ?? data?.text ?? null;
+    return data?.current?.quote ?? null;
   } catch {
     return null;
+  }
+}
+
+// Full quote history for a token, oldest first. Used so the victory line
+// can be a different real quote than whatever was already shown as the
+// pre-fight taunt, instead of repeating it.
+export async function fetchHoodTalkHistory(tokenId) {
+  try {
+    const res = await fetch(`${BASE}/token/${tokenId}/hood-talk/history`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data?.talks ?? []).map((t) => t.quote).filter(Boolean);
+  } catch {
+    return [];
   }
 }
 
@@ -76,9 +90,10 @@ async function fetchTransparentHeadDataUri(svgUrl) {
 }
 
 export async function loadFighterData(tokenId) {
-  const [token, talk] = await Promise.all([
+  const [token, talk, talkHistory] = await Promise.all([
     fetchToken(tokenId),
     fetchHoodTalk(tokenId),
+    fetchHoodTalkHistory(tokenId),
   ]);
   const imageUrl = await fetchTransparentHeadDataUri(token.image.svg);
   const { hoodie, dress, mouth, top, eyes } = token.traits;
@@ -92,5 +107,6 @@ export async function loadFighterData(tokenId) {
     rareTraitCount,
     imageUrl,
     taunt: talk,
+    talkHistory,
   };
 }

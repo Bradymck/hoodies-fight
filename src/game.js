@@ -155,12 +155,24 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
     } else if (p2PowerPct < 100) powerFullFired.p2 = false;
   }
 
+  // Prefers a quote the fighter hasn't already said pre-fight (their
+  // taunt), so the win screen doesn't just repeat the intro line. Falls
+  // back to the taunt itself if that's all they've got recorded.
+  function pickVictoryQuote(fighter) {
+    const history = fighter.data.talkHistory ?? [];
+    const fresh = history.filter((q) => q !== fighter.data.taunt);
+    const pool = fresh.length > 0 ? fresh : history;
+    if (pool.length > 0) return pool[Math.floor(Math.random() * pool.length)];
+    return fighter.data.taunt ?? null;
+  }
+
   function endRound(winner) {
     if (ended) return;
     ended = true;
-    const result = document.getElementById("result");
-    result.textContent = winner ? `${winner.name} WINS!` : "DRAW";
-    result.classList.remove("hidden");
+    document.getElementById("result-title").textContent = winner ? `${winner.name} WINS!` : "DRAW";
+    const quote = winner ? pickVictoryQuote(winner) : null;
+    document.getElementById("result-quote").textContent = quote ? `"${quote}"` : "";
+    document.getElementById("result").classList.remove("hidden");
     if (onEnd) onEnd(winner);
   }
 
