@@ -1,6 +1,8 @@
 const GROUND_Y = 300;
 const HEAD_SIZE = 30;
 const ARENA_BG = loadImg("assets/backgrounds/arena.png");
+const PLATFORM_TILE = loadImg("assets/backgrounds/platform.png");
+let platformPattern = null;
 
 const SHEETS = {
   idle: { img: loadImg("assets/sprites/idle.png"), frameSize: 78 },
@@ -139,11 +141,19 @@ export function drawArena(ctx, w, h) {
     ctx.fillStyle = "#1b1330";
     ctx.fillRect(0, 0, w, h);
   }
-  ctx.strokeStyle = "#5a4680aa";
-  ctx.beginPath();
-  ctx.moveTo(0, GROUND_Y);
-  ctx.lineTo(w, GROUND_Y);
-  ctx.stroke();
+
+  if (PLATFORM_TILE.complete && PLATFORM_TILE.naturalWidth > 0) {
+    if (!platformPattern) platformPattern = ctx.createPattern(PLATFORM_TILE, "repeat");
+    const platformH = h - GROUND_Y;
+    const scale = platformH / PLATFORM_TILE.naturalHeight;
+    ctx.imageSmoothingEnabled = false;
+    ctx.save();
+    ctx.translate(0, GROUND_Y);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = platformPattern;
+    ctx.fillRect(0, 0, w / scale, platformH / scale);
+    ctx.restore();
+  }
 }
 
 export function drawFlash(ctx, w, h, alpha) {
