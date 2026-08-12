@@ -26,6 +26,12 @@ const BLOOD_SPATTER_SHEET = loadImg("assets/fx/blood-spatter-sheet.png");
 const BLOOD_SPATTER_FRAME = 34;
 const BLOOD_SPATTER_FRAMES = 5;
 
+// Static splat shapes layered behind the animated spatter burst for extra
+// density - 3 variants (small/medium/large) in one 240x80 sheet, 80px each.
+const BLOOD_SPLAT_EXTRA_SHEET = loadImg("assets/fx/blood-splat-extra.png");
+const BLOOD_SPLAT_EXTRA_FRAME = 80;
+const BLOOD_SPLAT_EXTRA_VARIANTS = 3;
+
 // KO flourish - single static burst image (pulled from the aquaprime-sandbox
 // project's fx set), animated here via scale/fade rather than a frame sheet.
 const HEAD_POP_IMG = loadImg("assets/fx/head-pop.png");
@@ -237,24 +243,54 @@ export const BLOOD_SPATTER_TOTAL_FRAMES = BLOOD_SPATTER_FRAMES;
 // at 1:1 next to the 1.4x-scaled fighters.
 const BLOOD_SPATTER_DRAW_SCALE = 1.8;
 
-export function drawBloodSpatter(ctx, x, y, frame) {
+export function drawBloodSpatter(ctx, x, y, frame, rotation = 0) {
   if (!BLOOD_SPATTER_SHEET.complete || BLOOD_SPATTER_SHEET.naturalWidth === 0) return;
   const f = Math.min(BLOOD_SPATTER_FRAMES - 1, Math.max(0, frame));
   const size = BLOOD_SPATTER_FRAME * BLOOD_SPATTER_DRAW_SCALE;
   ctx.save();
   ctx.imageSmoothingEnabled = false;
+  ctx.translate(x, y);
+  ctx.rotate(rotation);
   ctx.drawImage(
     BLOOD_SPATTER_SHEET,
     f * BLOOD_SPATTER_FRAME,
     0,
     BLOOD_SPATTER_FRAME,
     BLOOD_SPATTER_FRAME,
-    x - size / 2,
-    y - size / 2,
+    -size / 2,
+    -size / 2,
     size,
     size,
   );
   ctx.restore();
+}
+
+// Static splat layered behind the animated spatter burst for extra density -
+// one of 3 fixed variants, randomized position/rotation/scale per spawn.
+export function drawBloodSplatExtra(ctx, x, y, variant, rotation, scale) {
+  if (!BLOOD_SPLAT_EXTRA_SHEET.complete || BLOOD_SPLAT_EXTRA_SHEET.naturalWidth === 0) return;
+  const v = Math.min(BLOOD_SPLAT_EXTRA_VARIANTS - 1, Math.max(0, variant));
+  const size = BLOOD_SPLAT_EXTRA_FRAME * scale;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.translate(x, y);
+  ctx.rotate(rotation);
+  ctx.drawImage(
+    BLOOD_SPLAT_EXTRA_SHEET,
+    v * BLOOD_SPLAT_EXTRA_FRAME,
+    0,
+    BLOOD_SPLAT_EXTRA_FRAME,
+    BLOOD_SPLAT_EXTRA_FRAME,
+    -size / 2,
+    -size / 2,
+    size,
+    size,
+  );
+  ctx.restore();
+}
+
+export function pickBloodSplatVariant() {
+  return Math.floor(Math.random() * BLOOD_SPLAT_EXTRA_VARIANTS);
 }
 
 // Plays once over the KO's head position - scales up and fades out rather

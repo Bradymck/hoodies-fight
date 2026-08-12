@@ -4,7 +4,9 @@ import {
   drawFlash,
   drawBloodSpot,
   drawBloodSpatter,
+  drawBloodSplatExtra,
   pickBloodSpotVariant,
+  pickBloodSplatVariant,
   drawHeadPop,
   BLOOD_SPATTER_TOTAL_FRAMES,
   HEAD_POP_DURATION,
@@ -116,45 +118,78 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60 }) {
   const powerFullFired = { p1: false, p2: false };
   const groundBlood = [];
   const spatters = [];
+  const splatExtras = [];
   const headPops = [];
 
   // Rough head height rather than a per-frame anchor lookup - matches the
   // same level-of-precision the blood-spatter positioning already uses.
   const HEAD_Y = GROUND_Y - 95;
 
+  // fighter.x is the LEFT EDGE of the sprite's full bounding box, not its
+  // visual center - drawFighter always translates to x then draws the frame
+  // running rightward from there, for both facings (mirroring flips content
+  // within that box, not the box's position). Every position calculated off
+  // a fighter for blood/FX purposes needs this offset or it lands entirely
+  // inside that fighter's own silhouette instead of at their actual body.
+  const BODY_CENTER_OFFSET = 53;
+
   function spawnBloodEffects(defender, attacker) {
-    // A few ground spots per hit, spread around the contact point, instead
-    // of just one - reads as a real gory mess instead of a single dot.
-    const spotCount = 2 + Math.floor(Math.random() * 2);
+    const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
+    const attackerCenterX = attacker.x + BODY_CENTER_OFFSET;
+
+    // Ground spots spray wide around the contact point instead of a tight
+    // cluster - several per hit, reads as a real gory mess, not a dot.
+    const spotCount = 3 + Math.floor(Math.random() * 3);
     for (let i = 0; i < spotCount; i++) {
       groundBlood.push({
         imgIndex: pickBloodSpotVariant(),
-        x: defender.x + (Math.random() - 0.5) * 34,
-        y: GROUND_Y + 4 + Math.random() * 10,
-        size: 16 + Math.random() * 18,
+        x: defenderCenterX + (Math.random() - 0.5) * 70,
+        y: GROUND_Y + 2 + Math.random() * 14,
+        size: 14 + Math.random() * 20,
         rotation: Math.random() * Math.PI * 2,
       });
     }
     while (groundBlood.length > MAX_GROUND_BLOOD) groundBlood.shift();
 
-    // Anchored between the two fighters, offset toward wherever the attacker
-    // actually is - NOT the defender's own (static, never-changing) facing,
-    // which pointed the wrong way whenever the real attacker was standing
-    // behind that fixed direction. Scales with the actual gap between them
-    // (~68-94px depending on the move) instead of a small fixed nudge, or it
-    // just renders on top of the defender instead of at the real contact
-    // point. Biased 40% of the way rather than a true 50/50 midpoint - the
-    // attacker's own lunge animation pushes them visually closer than their
-    // logical x, so a true midpoint reads as skewed toward the attacker.
-    // Height varies by attack type so a kick lands lower than a punch/special.
-    const gapX = Math.abs(attacker.x - defender.x);
-    const towardAttacker = attacker.x >= defender.x ? 1 : -1;
+    // Anchored between the two fighters' actual visual centers, offset
+    // toward wherever the attacker actually is - NOT the defender's own
+    // (static, never-changing) facing, which pointed the wrong way whenever
+    // the real attacker was standing behind that fixed direction, and NOT
+    // raw defender.x either, which is that fighter's left edge rather than
+    // their body - anchoring there and then offsetting further toward the
+    // attacker landed the burst inside the ATTACKER's own silhouette.
+    // Scales with the actual gap between them (~68-94px depending on the
+    // move) instead of a small fixed nudge. Biased 40% of the way rather
+    // than a true 50/50 midpoint - the attacker's own lunge animation pushes
+    // them visually closer than their logical x, so a true midpoint reads as
+    // skewed toward the attacker. Height varies by attack type so a kick
+    // lands lower than a punch/special.
+    const gapX = Math.abs(attackerCenterX - defenderCenterX);
+    const towardAttacker = attackerCenterX >= defenderCenterX ? 1 : -1;
     const contactHeight = attacker.state === "kick" ? GROUND_Y - 20 : GROUND_Y - 50;
+    const contactX = defenderCenterX + towardAttacker * (gapX * 0.4);
+
+    // A static splat layered behind the animated burst first, for extra
+    // density - fully randomized position/rotation/scale each time so
+    // stacking several hits' worth never looks like the same stamp reused.
+    const splatCount = 1 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < splatCount; i++) {
+      splatExtras.push({
+        x: contactX + (Math.random() - 0.5) * 24,
+        y: contactHeight + (Math.random() - 0.5) * 20,
+        variant: pickBloodSplatVariant(),
+        rotation: Math.random() * Math.PI * 2,
+        scale: 0.7 + Math.random() * 0.6,
+      });
+    }
+    while (splatExtras.length > MAX_GROUND_BLOOD) splatExtras.shift();
+
     const burstCount = 2 + Math.floor(Math.random() * 2);
     for (let i = 0; i < burstCount; i++) {
       spatters.push({
-        x: defender.x + towardAttacker * (gapX * 0.4 + (Math.random() - 0.5) * 10),
+        x: contactX + (Math.random() - 0.5) * 14,
         y: contactHeight + (Math.random() - 0.5) * 16,
+        rotation: Math.random() * Math.PI * 2,
         t: -Math.floor(Math.random() * 3),
       });
     }
@@ -286,6 +321,11 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60 }) {
     // close range a lunging attack sprite can visually overlap the
     // defender's spot and hide/misattribute a decal drawn below them.
     for (const decal of groundBlood) drawBloodSpot(ctx, decal);
+    // Static splats layer behind the animated spatter burst, per the extra
+    // asset - drawn after the ground spots but before the burst itself.
+    for (const s of splatExtras) {
+      drawBloodSplatExtra(ctx, s.x, s.y, s.variant, s.rotation, s.scale);
+    }
     for (let i = spatters.length - 1; i >= 0; i--) {
       const s = spatters[i];
       const spriteFrame = Math.floor(s.t / SPATTER_TICKS_PER_FRAME);
@@ -293,7 +333,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60 }) {
         spatters.splice(i, 1);
         continue;
       }
-      drawBloodSpatter(ctx, s.x, s.y, spriteFrame);
+      drawBloodSpatter(ctx, s.x, s.y, spriteFrame, s.rotation);
       s.t++;
     }
     for (let i = headPops.length - 1; i >= 0; i--) {
