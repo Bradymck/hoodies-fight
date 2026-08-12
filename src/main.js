@@ -13,9 +13,35 @@ const walletStatus = document.getElementById("wallet-status");
 const characterSelect = document.getElementById("character-select");
 const characterGrid = document.getElementById("character-grid");
 
-if (!hasInjectedWallet()) {
-  connectWalletBtn.disabled = true;
-  connectWalletBtn.textContent = "NO WALLET DETECTED";
+// One clear path per visitor instead of both options competing for
+// attention: a wallet means real-Hoodie-vs-AI is the whole point, so free
+// local play (and all the wallet/crypto UI) just gets out of the way for
+// anyone who doesn't have one.
+function showWalletOnly() {
+  document.getElementById("local-play").classList.add("hidden");
+}
+function showLocalOnly() {
+  document.getElementById("wallet-play").classList.add("hidden");
+}
+
+if (hasInjectedWallet()) {
+  showWalletOnly();
+} else {
+  // Some wallet extensions inject window.ethereum asynchronously, slightly
+  // after this script runs - a single synchronous check at load time can
+  // race and wrongly decide "no wallet" for someone who actually has one.
+  // Give it a brief grace window via the event most wallets fire, with a
+  // timeout fallback so a visitor with no wallet at all isn't left staring
+  // at a decision that never resolves.
+  let decided = false;
+  const onInit = () => {
+    if (decided) return;
+    decided = true;
+    if (hasInjectedWallet()) showWalletOnly();
+    else showLocalOnly();
+  };
+  window.addEventListener("ethereum#initialized", onInit, { once: true });
+  setTimeout(onInit, 300);
 }
 
 async function startMatch(data1, data2, opts) {

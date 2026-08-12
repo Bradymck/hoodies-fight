@@ -103,13 +103,6 @@ h1 {
   transform: none;
 }
 
-.wallet-divider {
-  margin: 18px 0 10px;
-  opacity: 0.5;
-  font-size: 11px;
-  letter-spacing: 0.2em;
-}
-
 #connect-wallet-btn {
   padding: 8px 20px;
   background: transparent;
