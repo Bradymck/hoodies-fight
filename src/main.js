@@ -31,36 +31,114 @@ startBtn.addEventListener("click", async () => {
     document.getElementById("arena").classList.remove("hidden");
     document.getElementById("p1-name").textContent = `${data1.name} (${data1.hoodieType})`;
     document.getElementById("p2-name").textContent = `${data2.name} (${data2.hoodieType})`;
-    pickRandomArena();
 
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
+    playRandomTrack();
+    await runMatch(data1, data2, canvas, ctx);
+  } catch (err) {
+    setupStatus.textContent = err.message;
+    startBtn.disabled = false;
+  }
+});
+
+const ROUNDS_TO_WIN = 2;
+// A drawn round (timeout tie or double-KO) replays instead of counting -
+// best-of-3 needs a decisive result each round to make progress. Repeated
+// draws shrink the clock each retry so two evenly-matched players can't
+// stall the match forever; sudden-death floor guarantees it resolves.
+const DRAW_RETRY_TIME_LIMITS = [45, 30, 15];
+const ROUND_RESULT_PAUSE_MS = 2200;
+
+async function runMatch(data1, data2, canvas, ctx) {
+  const wins = { p1: 0, p2: 0 };
+  let roundNum = 1;
+  let drawStreak = 0;
+
+  while (wins.p1 < ROUNDS_TO_WIN && wins.p2 < ROUNDS_TO_WIN) {
+    updateRoundInfo(roundNum, wins);
+
     const p1 = new Fighter(data1, 200, 1);
     const p2 = new Fighter(data2, 600, -1);
+    pickRandomArena();
+    // Bars would otherwise still show the previous round's ending values
+    // (e.g. the loser's empty health bar) through the whole next countdown.
+    resetBars();
 
-    // Head images were just pointed at a URL (see Fighter constructor) and
-    // load async, so they're almost never ready on this very first draw.
-    // Keep redrawing every frame through the whole countdown instead of
-    // drawing once, so the heads pop in the moment they finish loading
-    // rather than staying missing until the real fight loop takes over.
     const stopPreFightRender = startPreFightRender(ctx, canvas, p1, p2);
 
-    showTaunt("taunt-p1", data1.taunt);
-    showTaunt("taunt-p2", data2.taunt);
-    const tauntsSpoken = Promise.all([speakTaunt(data1.taunt), speakTaunt(data2.taunt)]);
+    // Taunts only play out on the very first round - hearing the same two
+    // lines (spoken aloud, no less) every single round gets old fast.
+    let tauntsSpoken = Promise.resolve();
+    if (roundNum === 1) {
+      showTaunt("taunt-p1", data1.taunt);
+      showTaunt("taunt-p2", data2.taunt);
+      tauntsSpoken = Promise.all([speakTaunt(data1.taunt), speakTaunt(data2.taunt)]);
+    }
 
     await runCountdown(tauntsSpoken);
 
     stopPreFightRender();
     document.getElementById("taunt-p1").classList.add("hidden");
     document.getElementById("taunt-p2").classList.add("hidden");
-    playRandomTrack();
-    createGame({ ctx, canvas, p1, p2 });
-  } catch (err) {
-    setupStatus.textContent = err.message;
-    startBtn.disabled = false;
+
+    const timeLimit = drawStreak > 0
+      ? DRAW_RETRY_TIME_LIMITS[Math.min(drawStreak - 1, DRAW_RETRY_TIME_LIMITS.length - 1)]
+      : 60;
+
+    const winner = await new Promise((resolve) => {
+      const stopGame = createGame({
+        ctx,
+        canvas,
+        p1,
+        p2,
+        timeLimit,
+        onEnd: (w) => {
+          stopGame();
+          resolve(w);
+        },
+      });
+    });
+
+    if (winner === p1) {
+      wins.p1++;
+      drawStreak = 0;
+    } else if (winner === p2) {
+      wins.p2++;
+      drawStreak = 0;
+    } else {
+      drawStreak++;
+    }
+
+    const matchWinner = wins.p1 >= ROUNDS_TO_WIN ? p1 : wins.p2 >= ROUNDS_TO_WIN ? p2 : null;
+    if (matchWinner) {
+      const title = document.getElementById("result-title");
+      title.textContent = `${matchWinner.name} WINS THE MATCH! (${wins.p1}-${wins.p2})`;
+      break;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, ROUND_RESULT_PAUSE_MS));
+    document.getElementById("result").classList.add("hidden");
+    if (winner) roundNum++;
+    // A draw replays the same round number rather than advancing it.
   }
-});
+}
+
+function resetBars() {
+  for (const id of ["p1-health", "p2-health"]) {
+    document.getElementById(id).style.width = "100%";
+  }
+  for (const id of ["p1-power", "p2-power"]) {
+    const el = document.getElementById(id);
+    el.style.width = "0%";
+    el.classList.remove("power-ready");
+  }
+}
+
+function updateRoundInfo(roundNum, wins) {
+  document.getElementById("round-info").textContent =
+    `ROUND ${roundNum} · ${wins.p1} - ${wins.p2}`;
+}
 
 function startPreFightRender(ctx, canvas, p1, p2) {
   let raf = requestAnimationFrame(function frame() {

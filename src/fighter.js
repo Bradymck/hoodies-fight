@@ -8,7 +8,7 @@ const SPECIAL = { duration: 40, activeStart: 14, activeEnd: 26, damage: 25, rang
 const HITSTUN_FRAMES = 24;
 const JUMP_DURATION = 36;
 const JUMP_HEIGHT = 55;
-const JUMP_COST = 15;
+const JUMP_COST = 8;
 const PUNCH_POWER_GAIN = 12;
 const PASSIVE_REGEN_PER_FRAME = 0.15; // ~9/sec at 60fps
 
@@ -66,7 +66,7 @@ export class Fighter {
     return true;
   }
 
-  update(input, opponent) {
+  update(input) {
     this.lastEvent = null;
 
     if (this.state === "ko") {
@@ -94,7 +94,7 @@ export class Fighter {
     }
 
     if (this.state === "jump") {
-      this.applyMove(input, opponent);
+      this.applyMove(input);
       if (this.stateT >= JUMP_DURATION) this.setState("idle");
       return;
     }
@@ -138,21 +138,22 @@ export class Fighter {
       return;
     }
 
-    const vx = this.applyMove(input, opponent);
+    const vx = this.applyMove(input);
     this.state = vx !== 0 ? "walk" : "idle";
   }
 
-  applyMove(input, opponent) {
+  // Collision (keeping the two fighters from ever overlapping) is resolved
+  // symmetrically by the caller after both fighters have moved - see
+  // resolveCollision in game.js. Doing it here per-fighter, keyed off each
+  // one's own static facing, didn't account for the opponent's own movement
+  // and could still let them slide past each other.
+  applyMove(input) {
     const speed = MOVE_SPEED * this.archetype.speedMult;
     let vx = 0;
     if (input.left) vx -= speed;
     if (input.right) vx += speed;
     this.x += vx;
     this.x = Math.max(50, Math.min(750, this.x));
-
-    const minGap = 40;
-    if (this.facing === 1 && opponent.x - this.x < minGap) this.x = opponent.x - minGap;
-    if (this.facing === -1 && this.x - opponent.x < minGap) this.x = opponent.x + minGap;
     return vx;
   }
 

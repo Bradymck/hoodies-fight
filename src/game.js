@@ -14,7 +14,17 @@ import { MAX_POWER } from "./fighter.js";
 import { playSound } from "./sound.js";
 
 const KEYMAP = {
-  p1: { left: "a", right: "d", block: "c", crouch: "s", jump: " ", punch: "f", kick: "g", special: "r" },
+  p1: {
+    left: "a",
+    right: "d",
+    block: "c",
+    crouch: "s",
+    jump: " ",
+    jump2: "w",
+    punch: "f",
+    kick: "g",
+    special: "r",
+  },
   p2: {
     left: "arrowleft",
     right: "arrowright",
@@ -31,11 +41,32 @@ const SHAKE_ON_HIT = 6;
 const SHAKE_ON_SPECIAL = 12;
 const FLASH_ON_HIT = 0.25;
 const SPATTER_TICKS_PER_FRAME = 3;
-const MAX_GROUND_BLOOD = 40;
+const MAX_GROUND_BLOOD = 90;
+// Solid-body distance the two fighters can never close past - smaller than
+// every attack's range (46/58/65), so standing at the wall still lets every
+// move connect.
+const MIN_FIGHTER_GAP = 40;
+const ARENA_MIN_X = 50;
+const ARENA_MAX_X = 750;
+
+// Pushes both fighters apart symmetrically whenever they'd overlap, instead
+// of each fighter unilaterally checking only its own (static) facing - that
+// old approach didn't account for the opponent's own movement and let them
+// slide past each other.
+function resolveCollision(a, b) {
+  const dx = b.x - a.x;
+  if (Math.abs(dx) >= MIN_FIGHTER_GAP) return;
+  const dir = dx >= 0 ? 1 : -1;
+  const overlap = MIN_FIGHTER_GAP - Math.abs(dx);
+  a.x -= (dir * overlap) / 2;
+  b.x += (dir * overlap) / 2;
+  a.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, a.x));
+  b.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, b.x));
+}
 
 const SCROLL_KEYS = new Set([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
 
-export function createGame({ ctx, canvas, p1, p2, onEnd }) {
+export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60 }) {
   const pressed = new Set();
   const keydown = (e) => {
     const key = e.key.toLowerCase();
@@ -52,14 +83,14 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
       right: pressed.has(map.right),
       block: pressed.has(map.block),
       crouch: pressed.has(map.crouch),
-      jump: pressed.has(map.jump),
+      jump: pressed.has(map.jump) || (map.jump2 && pressed.has(map.jump2)),
       punch: pressed.has(map.punch),
       kick: pressed.has(map.kick),
       special: pressed.has(map.special),
     };
   }
 
-  let timeLeft = 60;
+  let timeLeft = timeLimit;
   let frame = 0;
   let ended = false;
   let shake = 0;
@@ -74,25 +105,35 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
   const HEAD_Y = GROUND_Y - 95;
 
   function spawnBloodEffects(defender, attacker) {
-    groundBlood.push({
-      imgIndex: pickBloodSpotVariant(),
-      x: defender.x + (Math.random() - 0.5) * 20,
-      y: GROUND_Y + 4 + Math.random() * 8,
-      size: 14 + Math.random() * 12,
-      rotation: Math.random() * Math.PI * 2,
-    });
-    if (groundBlood.length > MAX_GROUND_BLOOD) groundBlood.shift();
+    // A few ground spots per hit, spread around the contact point, instead
+    // of just one - reads as a real gory mess instead of a single dot.
+    const spotCount = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < spotCount; i++) {
+      groundBlood.push({
+        imgIndex: pickBloodSpotVariant(),
+        x: defender.x + (Math.random() - 0.5) * 34,
+        y: GROUND_Y + 4 + Math.random() * 10,
+        size: 16 + Math.random() * 18,
+        rotation: Math.random() * Math.PI * 2,
+      });
+    }
+    while (groundBlood.length > MAX_GROUND_BLOOD) groundBlood.shift();
 
-    // Anchored on the defender (where the hit actually lands), not a
-    // midpoint - a midpoint reads as "near the attacker" once their strike
-    // animation lunges forward. Height varies by attack type so a kick
-    // lands lower than a punch/special.
+    // Anchored on the defender (where the hit actually lands), offset
+    // toward wherever the attacker actually is - NOT the defender's own
+    // (static, never-changing) facing, which pointed the wrong way whenever
+    // the real attacker was standing behind that fixed direction. Height
+    // varies by attack type so a kick lands lower than a punch/special.
+    const towardAttacker = attacker.x >= defender.x ? 1 : -1;
     const contactHeight = attacker.state === "kick" ? GROUND_Y - 20 : GROUND_Y - 50;
-    spatters.push({
-      x: defender.x + defender.facing * 8,
-      y: contactHeight,
-      t: 0,
-    });
+    const burstCount = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < burstCount; i++) {
+      spatters.push({
+        x: defender.x + towardAttacker * (6 + Math.random() * 10),
+        y: contactHeight + (Math.random() - 0.5) * 16,
+        t: -Math.floor(Math.random() * 3),
+      });
+    }
   }
 
   function checkHit(attacker, defender) {
@@ -193,8 +234,9 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
     if (ended) return;
     frame++;
 
-    p1.update(readInput(KEYMAP.p1), p2);
-    p2.update(readInput(KEYMAP.p2), p1);
+    p1.update(readInput(KEYMAP.p1));
+    p2.update(readInput(KEYMAP.p2));
+    resolveCollision(p1, p2);
 
     checkHit(p1, p2);
     checkHit(p2, p1);
@@ -260,6 +302,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd }) {
     if (!ended) requestAnimationFrame(loop);
   }
 
+  document.getElementById("timer").textContent = timeLeft;
   requestAnimationFrame(loop);
 
   return () => {

@@ -15,7 +15,7 @@ body {
   font-family: "Courier New", monospace;
   text-align: center;
   margin: 0;
-  padding: 24px;
+  padding: clamp(8px, 4vw, 24px);
   background-image: radial-gradient(circle at 50% 0%, #1a1330 0%, #0b0b0f 70%);
 }
 
@@ -23,7 +23,7 @@ h1 {
   position: relative;
   z-index: 1;
   font-family: "Bungee", "Courier New", monospace;
-  font-size: 64px;
+  font-size: clamp(28px, 8vw, 64px);
   letter-spacing: 0.08em;
   margin-bottom: 16px;
   color: #3ddc3d;
@@ -62,6 +62,14 @@ h1 {
   border-radius: 4px;
 }
 
+.setup-form {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px 4px;
+}
+
 #setup input {
   width: 70px;
   margin: 0 8px;
@@ -73,7 +81,6 @@ h1 {
 }
 
 #setup button {
-  margin-left: 16px;
   padding: 6px 18px;
   background: #3ddc3d;
   color: #0b0b0f;
@@ -165,11 +172,21 @@ h1 {
 
 .names {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
+  align-items: center;
+  gap: 2px 8px;
   font-size: 12px;
   opacity: 0.85;
   margin-bottom: 4px;
   letter-spacing: 0.05em;
+}
+
+#round-info {
+  font-size: 11px;
+  color: #ffe066;
+  opacity: 0.9;
+  letter-spacing: 0.1em;
 }
 
 #canvas-wrap {
@@ -182,6 +199,8 @@ canvas {
   box-shadow: 0 0 0 4px #0b0b0f, 0 0 24px #3ddc3d22;
   image-rendering: pixelated;
   width: 100%;
+  max-width: 800px;
+  aspect-ratio: 800 / 360;
   display: block;
 }
 

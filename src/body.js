@@ -233,9 +233,14 @@ export function pickBloodSpotVariant() {
 // and is gone, unlike the ground spots which stay.
 export const BLOOD_SPATTER_TOTAL_FRAMES = BLOOD_SPATTER_FRAMES;
 
+// Drawn at ~1.8x native size - the source frames read as too small/subtle
+// at 1:1 next to the 1.4x-scaled fighters.
+const BLOOD_SPATTER_DRAW_SCALE = 1.8;
+
 export function drawBloodSpatter(ctx, x, y, frame) {
   if (!BLOOD_SPATTER_SHEET.complete || BLOOD_SPATTER_SHEET.naturalWidth === 0) return;
   const f = Math.min(BLOOD_SPATTER_FRAMES - 1, Math.max(0, frame));
+  const size = BLOOD_SPATTER_FRAME * BLOOD_SPATTER_DRAW_SCALE;
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(
@@ -244,10 +249,10 @@ export function drawBloodSpatter(ctx, x, y, frame) {
     0,
     BLOOD_SPATTER_FRAME,
     BLOOD_SPATTER_FRAME,
-    x - BLOOD_SPATTER_FRAME / 2,
-    y - BLOOD_SPATTER_FRAME / 2,
-    BLOOD_SPATTER_FRAME,
-    BLOOD_SPATTER_FRAME,
+    x - size / 2,
+    y - size / 2,
+    size,
+    size,
   );
   ctx.restore();
 }

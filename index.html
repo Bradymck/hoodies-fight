@@ -16,9 +16,11 @@
       <source src="assets/backgrounds/setup-bg.mp4" type="video/mp4" />
     </video>
     <div id="setup-content">
-      <label>P1 Hoodie ID <input id="p1-id" type="number" value="125" /></label>
-      <label>P2 Hoodie ID <input id="p2-id" type="number" value="120" /></label>
-      <button id="start-btn">FIGHT</button>
+      <div class="setup-form">
+        <label>P1 Hoodie ID <input id="p1-id" type="number" value="125" /></label>
+        <label>P2 Hoodie ID <input id="p2-id" type="number" value="120" /></label>
+        <button id="start-btn">FIGHT</button>
+      </div>
       <p id="setup-status"></p>
       <p class="controls">Builder = harder hits &nbsp;|&nbsp; Flipper = faster &nbsp;|&nbsp; Hodler = more health &nbsp;|&nbsp; Collector = blocks better &nbsp;|&nbsp; rare traits add a small health bonus</p>
     </div>
@@ -38,6 +40,7 @@
     </div>
     <div class="names">
       <span id="p1-name"></span>
+      <span id="round-info">ROUND 1 &middot; 0 - 0</span>
       <span id="p2-name"></span>
     </div>
     <div id="canvas-wrap">
