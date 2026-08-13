@@ -39,6 +39,11 @@ export const SLIDE = { duration: 44, damage: 12, knockback: 90 };
 // How long the "hit by a slide" reaction pose holds before returning to
 // idle - see takeDamage's kind==="slide" branch.
 const KNOCKBACK_DURATION = 28;
+// Arc height for the knockback flight - a real launch-and-land trajectory
+// (see jumpOffset and setKnockbackMotion below) rather than the old instant
+// teleport-then-freeze. Shorter than a real jump's arc (140) since this is a
+// reaction, not a voluntary leap.
+const KNOCKBACK_ARC_HEIGHT = 55;
 // Anti-air counter: rises like a (shorter, faster) jump with an active
 // hitbox partway through, specifically so it can catch an opponent mid-jump
 // - see checkUppercutHit in game.js, which deliberately does NOT exclude a
@@ -112,6 +117,15 @@ export class Fighter {
     return true;
   }
 
+  // Called by game.js right after takeDamage sets state to "knockback" -
+  // records the launch point/direction/distance so update() can fly the
+  // fighter there over KNOCKBACK_DURATION instead of snapping instantly.
+  setKnockbackMotion(dir, total) {
+    this.knockbackStartX = this.x;
+    this.knockbackDir = dir;
+    this.knockbackTotal = total;
+  }
+
   update(input) {
     this.lastEvent = null;
 
@@ -148,6 +162,18 @@ export class Fighter {
       // what game.js listens for to actually spawn the projectile.
       if (this.state === "special" && this.stateT === SPECIAL.release) {
         this.lastEvent = "special-release";
+      }
+      // Real launch-and-land flight instead of the old instant teleport -
+      // eased out (fast launch, decelerating into the landing) toward the
+      // total distance set by setKnockbackMotion, driven off absolute t so
+      // there's no drift/accumulation error frame to frame.
+      if (this.state === "knockback" && this.knockbackDir) {
+        const t = Math.min(1, this.stateT / KNOCKBACK_DURATION);
+        const eased = 1 - (1 - t) * (1 - t);
+        this.x = Math.max(
+          50,
+          Math.min(750, this.knockbackStartX + this.knockbackDir * this.knockbackTotal * eased),
+        );
       }
       if (this.stateT >= durations[this.state]) this.setState("idle");
       return;
@@ -234,10 +260,10 @@ export class Fighter {
     return vx;
   }
 
-  // Covers both real jump and the uppercut's own (shorter) rise - same
-  // parabola shape, different height/duration - so body.js's draw code can
-  // stay untouched and just read one property regardless of which move it
-  // is.
+  // Covers real jump, uppercut's own (shorter) rise, and knockback's launch
+  // arc - all the same parabola shape, different height/duration - so
+  // body.js's draw code can stay untouched and just read one property
+  // regardless of which move it is.
   get jumpOffset() {
     if (this.state === "jump") {
       const t = Math.min(1, this.stateT / JUMP_DURATION);
@@ -246,6 +272,10 @@ export class Fighter {
     if (this.state === "uppercut") {
       const t = Math.min(1, this.stateT / UPPERCUT.duration);
       return UPPERCUT.height * 4 * t * (1 - t);
+    }
+    if (this.state === "knockback") {
+      const t = Math.min(1, this.stateT / KNOCKBACK_DURATION);
+      return KNOCKBACK_ARC_HEIGHT * 4 * t * (1 - t);
     }
     return 0;
   }

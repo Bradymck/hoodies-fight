@@ -323,7 +323,10 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     defender.takeDamage(attacker.slideDamage, attacker.x, "slide");
     attacker.onLandedHit("slide");
     const pushDir = defenderCenterX >= attackerCenterX ? 1 : -1;
-    defender.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, defender.x + pushDir * SLIDE.knockback));
+    // Flies out over the knockback state's own duration (see setKnockbackMotion/
+    // jumpOffset in fighter.js) instead of teleporting straight to the final
+    // spot - a real launch-and-land arc, not an instant snap-then-freeze.
+    defender.setKnockbackMotion(pushDir, SLIDE.knockback);
     attacker.lastEvent = "slide-hit";
     shake = Math.max(shake, SHAKE_ON_HIT);
     flash = Math.max(flash, FLASH_ON_HIT);
