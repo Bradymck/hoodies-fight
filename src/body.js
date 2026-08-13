@@ -131,12 +131,16 @@ const HEAD_ANCHORS = {
   // 7-frame low sweep special (Hodler) - crouched throughout, so y sits much
   // lower than the standing sheets (matches crouch's own anchor pattern).
   specialLow: [{"x":40.2,"y":20},{"x":38.7,"y":20},{"x":41.5,"y":20},{"x":35.9,"y":21},{"x":23.3,"y":21},{"x":25.8,"y":21},{"x":30.4,"y":21}],
-  // 8-frame collapse - the character genuinely tumbles as they go down, so
-  // unlike every other sheet the head anchor isn't a small wobble around one
-  // side, it swings from left (frames 0-2, still mostly upright) to right
-  // (frames 3-7, settling into the final sprawled pose) as part of the fall
-  // itself - verified against the art, not a fist/arm-style sampling error.
-  death: [{"x":13.3,"y":2},{"x":13.8,"y":4},{"x":14.4,"y":15},{"x":42.9,"y":18},{"x":47.1,"y":16},{"x":41.7,"y":19},{"x":43.6,"y":26},{"x":42.8,"y":27}],
+  // 8-frame collapse. The earlier version of this data swung the anchor from
+  // x~14 to x~43 across the sequence - that was wrong, a sampling error, not
+  // real tumbling: frames 3-7 raise a leg up and over the torso, so a
+  // topmost-pixel heuristic locks onto the kicked-up leg/foot instead of the
+  // head once the leg becomes the tallest part of the silhouette. The head
+  // itself stays on the left side the whole time, tucking face-down into the
+  // collar as the body settles - resampled by tracking the small light-grey
+  // collar-patch accent (a consistent, distinctly-colored landmark right at
+  // the neck in every frame) instead of raw silhouette height.
+  death: [{"x":11.6,"y":10.9},{"x":10.6,"y":12.9},{"x":7.3,"y":24.3},{"x":8.3,"y":33.4},{"x":8.4,"y":38.6},{"x":9.0,"y":40.0},{"x":8.8,"y":42.4},{"x":8.5,"y":43.0}],
 };
 
 const ANIMS = {
