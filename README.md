@@ -55,8 +55,9 @@ The **code** in this repo is public domain (CC0) — see [LICENSE](LICENSE). For
 
 - Character head art: pulled live from the OnChainHoodies API at runtime and never bundled in this repo - CC0, same as the collection itself.
 - Sound effects: [Kenney](https://kenney.nl) Impact Sounds & UI Audio packs - CC0.
-- Fighter sprite sheets (idle/walk/attack/kick/jump/hurt/crouch/block/spellcast, `assets/sprites/`): AI-generated via SpriteCook.
-- `assets/backgrounds/arena*.png` and a handful of other sprite sheets (slide/knockback/uppercut/flex/rat-rush) have **unconfirmed provenance/licensing** and should not be assumed reusable - don't lift these into your own project without checking first. If you're forking this repo, swap them for something you know the rights to.
+- Fighter sprite sheets (idle/walk/attack/kick/jump/hurt/crouch/block/spellcast, `assets/sprites/`) and both arena backgrounds (`assets/backgrounds/arena-2.png`, `arena-3.png`): AI-generated via SpriteCook.
+- `assets/backgrounds/arena.png` (unused, kept for reference): generated on Pixellab.
+- A handful of other sprite sheets (slide/knockback/uppercut/flex/rat-rush) have **unconfirmed provenance/licensing** and should not be assumed reusable - don't lift these into your own project without checking first. If you're forking this repo, swap them for something you know the rights to.
 
 CC0 (on the code) means credit is never legally required - if you build on this, a mention is appreciated but entirely up to you.
 
