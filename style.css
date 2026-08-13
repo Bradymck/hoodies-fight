@@ -189,6 +189,31 @@ h1 {
   background: #2081e222;
 }
 
+/* Site's own green rather than OpenSea's blue - this stays on-page (no NFT
+   purchase, no external link), so it reads as the free/same-site option
+   sitting next to the external "go buy one" one. */
+#free-play-btn {
+  display: inline-block;
+  margin-top: 4px;
+  margin-left: 8px;
+  padding: 8px 20px;
+  background: transparent;
+  color: #3ddc3d;
+  border: 2px solid #3ddc3d;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: bold;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  box-shadow: 0 0 12px #3ddc3d44;
+  transition: transform 0.1s ease-out;
+}
+
+#free-play-btn:hover {
+  transform: scale(1.03);
+  background: #3ddc3d22;
+}
+
 #character-select {
   margin-top: 12px;
 }

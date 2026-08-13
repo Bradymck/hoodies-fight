@@ -9,11 +9,26 @@ import { initBloodCode } from "./blood-code.js";
 
 initBloodCode();
 
+// Space's default browser behavior is "scroll the page down" - game.js only
+// guards against that once an actual match is running (its own keydown
+// listener isn't attached until createGame() starts), which left a gap on
+// the setup screen and during the pre-fight countdown/taunt window where
+// jump's key still scrolled the page. Global and always-on instead, so
+// there's no gap regardless of which screen is showing - except while an
+// actual text/number input is focused, where space should behave normally.
+window.addEventListener("keydown", (e) => {
+  if (e.key !== " ") return;
+  const tag = document.activeElement?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA") return;
+  e.preventDefault();
+});
+
 const startBtn = document.getElementById("start-btn");
 const setupStatus = document.getElementById("setup-status");
 const connectWalletBtn = document.getElementById("connect-wallet-btn");
 const walletStatus = document.getElementById("wallet-status");
 const openseaBtn = document.getElementById("opensea-btn");
+const freePlayBtn = document.getElementById("free-play-btn");
 const characterSelect = document.getElementById("character-select");
 const characterGrid = document.getElementById("character-grid");
 const hypeEl = document.getElementById("hype");
@@ -116,6 +131,7 @@ connectWalletBtn.addEventListener("click", async () => {
   connectWalletBtn.disabled = true;
   walletStatus.textContent = "Connecting wallet...";
   openseaBtn.classList.add("hidden");
+  freePlayBtn.classList.add("hidden");
   const soundReady = initSound();
 
   try {
@@ -128,17 +144,32 @@ connectWalletBtn.addEventListener("click", async () => {
     if (!tokenIds.length) {
       walletStatus.textContent = "No Hoodies in this wallet yet - grab one and come back swinging.";
       openseaBtn.classList.remove("hidden");
+      // Not everyone with a wallet wants to buy in just to try it out - this
+      // drops them straight into the same free local-play flow as someone
+      // with no wallet at all, no NFT required.
+      freePlayBtn.classList.remove("hidden");
       connectWalletBtn.disabled = false;
       return;
     }
 
     openseaBtn.classList.add("hidden");
+    freePlayBtn.classList.add("hidden");
     walletStatus.textContent = `${tokenIds.length} Hoodie${tokenIds.length === 1 ? "" : "s"} found - pick your fighter.`;
     await renderCharacterGrid(tokenIds);
   } catch (err) {
     walletStatus.textContent = err.message;
     connectWalletBtn.disabled = false;
   }
+});
+
+// Drops a wallet-connected-but-no-Hoodie visitor straight into the same
+// free local-play form a no-wallet visitor already gets - reveals it
+// in-place rather than requiring a page reload, since local-play was only
+// hidden in the first place because a wallet got detected.
+freePlayBtn.addEventListener("click", () => {
+  document.getElementById("wallet-play").classList.add("hidden");
+  document.getElementById("local-play").classList.remove("hidden");
+  setHype(HYPE_LOCAL);
 });
 
 // Emoji + flavor text per archetype - the numbers (damage/speed/health/
