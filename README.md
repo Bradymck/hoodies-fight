@@ -67,8 +67,7 @@ The **code** in this repo is public domain (CC0) — see [LICENSE](LICENSE). For
 **Assets are not all CC0** - licensing is per-asset, not blanket:
 
 - Character head art: pulled live from the OnChainHoodies API at runtime and never bundled in this repo - CC0, same as the collection itself.
-- Sound effects (`assets/sounds/*.mp3`, not `licensed/`): [Kenney](https://kenney.nl) Impact Sounds & UI Audio packs - CC0.
-- The special's magical whoosh/impact sounds (`assets/sounds/licensed/`) are paid Splice samples - licensed for use *in* this game, but Splice's terms don't allow redistributing the raw sample files themselves. That folder is gitignored rather than committed - if you fork this repo, either supply your own licensed copies at the same paths (see `src/sound.js`) or leave them out entirely; the game already treats a missing/failed sound as a soft warning, not a crash.
+- **All sound effects** (`assets/sounds/*.mp3`) are paid [Splice](https://splice.com) samples, and **all music tracks** (`assets/music/*.mp3`) are [Suno](https://suno.com)-generated - licensed for use *in* this game, but neither license permits redistributing the raw files. Both folders are gitignored rather than committed (an earlier version of this README incorrectly credited the sound effects as CC0 Kenney packs - that was wrong, fixed here). If you fork this repo, supply your own audio at the same paths (see `src/sound.js`) or leave them out entirely - the game already treats a missing/failed clip as a soft warning, not a crash.
 - Fighter sprite sheets (idle/walk/attack/kick/jump/hurt/crouch/block/spellcast, `assets/sprites/`) and both arena backgrounds (`assets/backgrounds/arena-2.png`, `arena-3.png`): AI-generated via SpriteCook.
 - `assets/backgrounds/arena.png` (unused, kept for reference): generated on Pixellab.
 - A handful of other sprite sheets (slide/knockback/uppercut/flex/rat-rush) have **unconfirmed provenance/licensing** and should not be assumed reusable - don't lift these into your own project without checking first. If you're forking this repo, swap them for something you know the rights to.
@@ -83,4 +82,5 @@ This is meant to be built on, not gatekept. See [CONTRIBUTING.md](CONTRIBUTING.m
 
 - Built by [Pixelpushin](https://github.com/Pixelpushin) - vibe-coded with [Claude Code](https://claude.com/claude-code), for better or worse
 - Character art: [OnChainHoodies](https://onchainhoodies.xyz) (CC0)
-- Sound effects: [Kenney](https://kenney.nl) Impact Sounds & UI Audio packs (CC0)
+- Sound effects: [Splice](https://splice.com) (licensed, not redistributed - see License section)
+- Music: [Suno](https://suno.com) (licensed, not redistributed - see License section)
