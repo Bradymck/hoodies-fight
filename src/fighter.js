@@ -75,15 +75,17 @@ const BLOCK_POWER_GAIN = 8;
 
 // One mechanical trait per Hood archetype - matches their own "Builders,
 // Collectors, Flippers and HODLers" framing directly rather than inventing
-// something disconnected from the actual collection identity.
-const ARCHETYPES = {
+// something disconnected from the actual collection identity. Exported so
+// the character-select tooltip (main.js) can read the real numbers instead
+// of hardcoding a second copy that could drift out of sync.
+export const ARCHETYPES = {
   Builder: { damageMult: 1.25, speedMult: 1, healthMult: 1, blockMult: 1 },
   Flipper: { damageMult: 1, speedMult: 1.3, healthMult: 1, blockMult: 1 },
   Hodler: { damageMult: 1, speedMult: 1, healthMult: 1.25, blockMult: 1 },
   Collector: { damageMult: 1, speedMult: 1, healthMult: 1, blockMult: 0.5 },
 };
 const DEFAULT_ARCHETYPE = { damageMult: 1, speedMult: 1, healthMult: 1, blockMult: 1 };
-const RARE_TRAIT_HEALTH_BONUS = 0.02;
+export const RARE_TRAIT_HEALTH_BONUS = 0.02;
 
 export class Fighter {
   constructor(data, x, facing) {

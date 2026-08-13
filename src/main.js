@@ -1,5 +1,5 @@
 import { loadFighterData, fetchWalletHoodies, fetchToken } from "./api.js";
-import { Fighter } from "./fighter.js";
+import { Fighter, ARCHETYPES, RARE_TRAIT_HEALTH_BONUS } from "./fighter.js";
 import { createGame } from "./game.js";
 import { initSound, playSound, playRandomTrack } from "./sound.js";
 import { pickRandomArena, drawArena, drawFighter } from "./body.js";
@@ -138,6 +138,34 @@ connectWalletBtn.addEventListener("click", async () => {
   }
 });
 
+// Emoji + flavor text per archetype - the numbers (damage/speed/health/
+// block multipliers) come straight from fighter.js's own ARCHETYPES so this
+// can't drift out of sync with what actually happens in a fight.
+const ARCHETYPE_INFO = {
+  Builder: { emoji: "🔨", perk: "Hits harder", special: "Special: a big high haymaker" },
+  Flipper: { emoji: "⚡", perk: "Moves faster", special: "Special: Hood Rat Rush - a rat swarm along the ground" },
+  Hodler: { emoji: "💎", perk: "More health", special: "Special: a ground roundhouse that blocks hits and stops slides cold" },
+  Collector: { emoji: "🛡️", perk: "Blocks better", special: "Special: the long-range bolt" },
+};
+
+function archetypeTooltip(type, rareTraitCount) {
+  const info = ARCHETYPE_INFO[type];
+  if (!info) return "";
+  const mult = ARCHETYPES[type];
+  const lines = [`${type} - ${info.perk}`];
+  if (mult) {
+    if (mult.damageMult !== 1) lines.push(`+${Math.round((mult.damageMult - 1) * 100)}% damage`);
+    if (mult.speedMult !== 1) lines.push(`+${Math.round((mult.speedMult - 1) * 100)}% move speed`);
+    if (mult.healthMult !== 1) lines.push(`+${Math.round((mult.healthMult - 1) * 100)}% health`);
+    if (mult.blockMult !== 1) lines.push(`${Math.round((1 - mult.blockMult) * 100)}% less chip damage blocking`);
+  }
+  lines.push(info.special);
+  if (rareTraitCount > 0) {
+    lines.push(`+${Math.round(rareTraitCount * RARE_TRAIT_HEALTH_BONUS * 100)}% health (${rareTraitCount} rare trait${rareTraitCount === 1 ? "" : "s"})`);
+  }
+  return lines.join("\n");
+}
+
 async function renderCharacterGrid(tokenIds) {
   // The grid used to just sit empty while every token's art loaded in
   // parallel - blank space with no feedback reads as broken, not loading.
@@ -163,14 +191,64 @@ async function renderCharacterGrid(tokenIds) {
   previews.forEach((token, i) => {
     if (!token) return;
     const id = tokenIds[i];
+    // The token's own name is just its collection index ("OnChainHoodies
+    // #495") - not useful for picking a fighter. The archetype is what
+    // actually matters here (it's what determines their stats and special),
+    // so that's the label, with a hover badge for the specifics.
+    const type = token.traits?.hoodie ?? "Builder";
+    const { dress, mouth, top, eyes } = token.traits ?? {};
+    const rareTraitCount = [dress, mouth, top, eyes].filter((t) => t?.tier === "Rare").length;
+    const info = ARCHETYPE_INFO[type];
     const card = document.createElement("div");
     card.className = "character-card";
     card.innerHTML = `
-      <img src="${token.image?.svg ?? ""}" alt="${token.token?.name ?? `#${id}`}" />
-      <div class="card-label">${token.token?.name ?? `#${id}`}</div>
+      <img src="${token.image?.svg ?? ""}" alt="${type}" />
+      <div class="card-label">${type}</div>
+      ${info ? `<div class="card-badge">${info.emoji}</div>` : ""}
     `;
     card.addEventListener("click", () => pickFighter(id));
+    if (info) attachBadgeTooltip(card.querySelector(".card-badge"), archetypeTooltip(type, rareTraitCount));
     characterGrid.appendChild(card);
+  });
+}
+
+// One shared tooltip node, appended straight to <body> - NOT nested inside
+// a card. position: fixed is supposed to escape all ancestor clipping, but
+// .character-card:hover applies its own transform: scale(), and CSS hover
+// state bubbles to ancestors, so while a badge is hovered its parent card
+// is ALSO :hover and gets transformed - which per spec makes that card the
+// containing block for any position:fixed descendant instead of the
+// viewport, trapping the tooltip right back inside the grid's own overflow
+// clip. Living outside every card (and being reused rather than one per
+// card) sidesteps that entirely.
+let sharedTooltip = null;
+function getSharedTooltip() {
+  if (sharedTooltip) return sharedTooltip;
+  sharedTooltip = document.createElement("div");
+  sharedTooltip.id = "badge-tooltip";
+  document.body.appendChild(sharedTooltip);
+  return sharedTooltip;
+}
+
+function attachBadgeTooltip(badge, text) {
+  if (!badge) return;
+  badge.addEventListener("mouseenter", () => {
+    const tooltip = getSharedTooltip();
+    tooltip.textContent = text;
+    tooltip.classList.add("visible");
+    const badgeRect = badge.getBoundingClientRect();
+    const tipRect = tooltip.getBoundingClientRect();
+    const left = Math.max(8, Math.min(
+      badgeRect.left + badgeRect.width / 2 - tipRect.width / 2,
+      window.innerWidth - tipRect.width - 8,
+    ));
+    const above = badgeRect.top - tipRect.height - 8;
+    const top = above < 8 ? badgeRect.bottom + 8 : above;
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+  });
+  badge.addEventListener("mouseleave", () => {
+    getSharedTooltip().classList.remove("visible");
   });
 }
 
