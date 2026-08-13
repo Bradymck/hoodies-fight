@@ -340,6 +340,10 @@ export function drawFighter(ctx, fighter, playerNum) {
       ctx.save();
       ctx.translate(anchor.x, anchor.y + HEAD_SIZE / 2);
       ctx.rotate((rotationDeg * Math.PI) / 180);
+      // Mirrored horizontally on top of the rotation - without this the head
+      // tips the wrong way relative to how the body actually falls (looked
+      // backwards against the real art, confirmed against a live screenshot).
+      ctx.scale(-1, 1);
       ctx.drawImage(headImg, -HEAD_SIZE / 2, -HEAD_SIZE, HEAD_SIZE, HEAD_SIZE);
       ctx.restore();
     } else {
