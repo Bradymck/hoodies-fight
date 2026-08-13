@@ -143,6 +143,18 @@ const HEAD_ANCHORS = {
   death: [{"x":11.6,"y":10.9},{"x":10.6,"y":12.9},{"x":7.3,"y":24.3},{"x":8.3,"y":33.4},{"x":8.4,"y":38.6},{"x":9.0,"y":40.0},{"x":8.8,"y":42.4},{"x":8.5,"y":43.0}],
 };
 
+// Head art is always drawn upright by default (fine for every standing/
+// crouching pose) - but the death collapse actually tips the body over from
+// standing to fully prone, so a never-rotating head reads as stuck bolt
+// upright on a horizontal body by the final resting frames. Degrees per
+// death frame, matching the body's own tumble (upright at the start,
+// horizontal by the time it settles) - applied as a clockwise rotation
+// around the head anchor, same signed value regardless of facing since it
+// lives in the same (possibly already-mirrored) local space the anchor does.
+const HEAD_ROTATIONS = {
+  death: [0, 5, 25, 45, 65, 82, 90, 90],
+};
+
 const ANIMS = {
   idle: { sheet: "idle", frames: 8, cyclesPerSec: 1.1, loop: true },
   walk: { sheet: "walk", frames: 8, cyclesPerSec: 2, loop: true },
@@ -314,14 +326,24 @@ export function drawFighter(ctx, fighter, playerNum) {
       };
     }
 
+    const rotationDeg = HEAD_ROTATIONS[anim.sheet]?.[frame % HEAD_ROTATIONS[anim.sheet].length] || 0;
+
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(
-      headImg,
-      anchor.x - HEAD_SIZE / 2,
-      anchor.y - HEAD_SIZE / 2,
-      HEAD_SIZE,
-      HEAD_SIZE,
-    );
+    if (rotationDeg) {
+      ctx.save();
+      ctx.translate(anchor.x, anchor.y);
+      ctx.rotate((rotationDeg * Math.PI) / 180);
+      ctx.drawImage(headImg, -HEAD_SIZE / 2, -HEAD_SIZE / 2, HEAD_SIZE, HEAD_SIZE);
+      ctx.restore();
+    } else {
+      ctx.drawImage(
+        headImg,
+        anchor.x - HEAD_SIZE / 2,
+        anchor.y - HEAD_SIZE / 2,
+        HEAD_SIZE,
+        HEAD_SIZE,
+      );
+    }
   }
 
   ctx.restore();
