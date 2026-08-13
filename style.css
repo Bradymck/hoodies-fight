@@ -518,3 +518,21 @@ canvas {
 #build-footer:empty {
   display: none;
 }
+
+#cheat-toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  font-family: "Bungee", "Courier New", monospace;
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  color: #ff3b3b;
+  background: #0b0b0ff2;
+  border: 2px solid #ff3b3b;
+  padding: 10px 20px;
+  box-shadow: 0 0 20px #ff3b3b88;
+  animation: pop-in 0.25s ease-out;
+  pointer-events: none;
+}

@@ -21,6 +21,7 @@ import { MAX_POWER, SLIDE, UPPERCUT, BUILDER_SPECIAL, HODLER_SPECIAL } from "./f
 import { playSound } from "./sound.js";
 import { createAIController } from "./ai.js";
 import { speakTaunt } from "./tts.js";
+import { isBloodUnlocked } from "./blood-code.js";
 
 const KEYMAP = {
   p1: {
@@ -206,6 +207,9 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   const BODY_CENTER_OFFSET = 53;
 
   function spawnBloodEffects(defender, attacker) {
+    // Hidden by default, Mortal Kombat-style - see blood-code.js for the
+    // secret sequence that unlocks it.
+    if (!isBloodUnlocked()) return;
     const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
     const attackerCenterX = attacker.x + BODY_CENTER_OFFSET;
 
@@ -668,6 +672,11 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       if (shake < 0.5) shake = 0;
     }
     drawArena(ctx, canvas.width, canvas.height);
+    // Ground blood is floor-level, so it draws before (behind) both
+    // fighters - a character standing on/near a pool should have their own
+    // legs occlude it, not float on top of it like a decal pasted over
+    // their sprite.
+    for (const decal of groundBlood) drawBloodSpot(ctx, decal);
     drawFighter(ctx, p1, 1);
     drawFighter(ctx, p2, 2);
     for (const p of projectiles) {
@@ -677,14 +686,11 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         drawSurgeBlast(ctx, p.x, p.y, Math.floor(p.t / PROJECTILE_SPRITE_TICKS_PER_FRAME), p.facing);
       }
     }
-    // Ground blood draws in front of both fighters, not underneath - at
-    // close range a lunging attack sprite can visually overlap the
-    // defender's spot and hide/misattribute a decal drawn below them.
-    for (const decal of groundBlood) drawBloodSpot(ctx, decal);
     // Static splats layer behind the animated spatter burst, per the extra
-    // asset - drawn after the ground spots but before the burst itself.
-    // These are mid-air hit-point decals, not ground pooling, so they age
-    // out and fade rather than sticking around for the rest of the fight.
+    // asset. Unlike groundBlood these are mid-air hit-point decals, not
+    // floor pooling - drawn in front of the fighters (an impact flash
+    // should read clearly at the moment of the hit) and aged out/faded
+    // rather than sticking around for the rest of the fight.
     for (let i = splatExtras.length - 1; i >= 0; i--) {
       const s = splatExtras[i];
       if (s.t >= SPLAT_EXTRA_LIFETIME_FRAMES) {

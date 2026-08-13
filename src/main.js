@@ -5,6 +5,9 @@ import { initSound, playSound, playRandomTrack } from "./sound.js";
 import { pickRandomArena, drawArena, drawFighter } from "./body.js";
 import { speakTaunt } from "./tts.js";
 import { connectWallet, hasInjectedWallet } from "./wallet.js";
+import { initBloodCode } from "./blood-code.js";
+
+initBloodCode();
 
 const startBtn = document.getElementById("start-btn");
 const setupStatus = document.getElementById("setup-status");
