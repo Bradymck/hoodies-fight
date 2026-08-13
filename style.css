@@ -166,12 +166,16 @@ h1 {
 }
 
 /* OpenSea's own brand blue rather than the site's green - reads as a
-   distinct external "go buy one" action, not another same-page control. */
+   distinct external "go buy one" action, not another same-page control.
+   A solid-ish dark backing (not fully transparent) instead of matching
+   connect-wallet's pure-transparent style - against the setup screen's own
+   video background, a transparent button let busy footage show through and
+   made the text hard to read next to the FIGHT button's solid fill. */
 #opensea-btn {
   display: inline-block;
   margin-top: 4px;
   padding: 8px 20px;
-  background: transparent;
+  background: #0b0b0fdd;
   color: #2081e2;
   border: 2px solid #2081e2;
   cursor: pointer;
@@ -191,13 +195,14 @@ h1 {
 
 /* Site's own green rather than OpenSea's blue - this stays on-page (no NFT
    purchase, no external link), so it reads as the free/same-site option
-   sitting next to the external "go buy one" one. */
+   sitting next to the external "go buy one" one. Same solid-ish backing as
+   opensea-btn, for the same readability reason. */
 #free-play-btn {
   display: inline-block;
   margin-top: 4px;
   margin-left: 8px;
   padding: 8px 20px;
-  background: transparent;
+  background: #0b0b0fdd;
   color: #3ddc3d;
   border: 2px solid #3ddc3d;
   cursor: pointer;

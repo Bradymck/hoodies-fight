@@ -216,15 +216,17 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
 
     // Ground spots spray wide around the contact point instead of a tight
     // cluster right under their feet - several per hit, reads as a real
-    // messy scatter. Y range now leans on the platform's top overscan
-    // (body.js) so a spot landing above GROUND_Y is still on visible floor,
-    // not spilling out over the background behind it.
+    // messy scatter. Nudged down from GROUND_Y - now that there's no
+    // platform texture (removed - the backgrounds have their own painted
+    // ground), spots centered right at GROUND_Y read as too high, landing
+    // behind/on the character instead of clearly on the ground in front of
+    // and below them.
     const spotCount = 4 + Math.floor(Math.random() * 4);
     for (let i = 0; i < spotCount; i++) {
       groundBlood.push({
         imgIndex: pickBloodSpotVariant(),
         x: defenderCenterX + (Math.random() - 0.5) * 160,
-        y: GROUND_Y - 8 + Math.random() * 28,
+        y: GROUND_Y + 8 + Math.random() * 28,
         size: 14 + Math.random() * 20,
         rotation: Math.random() * Math.PI * 2,
       });
@@ -287,6 +289,70 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         rotation: Math.random() * Math.PI * 2,
         t: -Math.floor(Math.random() * 3),
       });
+    }
+  }
+
+  // Ground blood is floor-level, so it draws before (behind) both fighters
+  // - a character standing on/near a pool should have their own legs
+  // occlude it, not float on top of it like a decal pasted over their
+  // sprite. Split out from the FX below (and called separately, before
+  // drawFighter) rather than combined into one function, since these two
+  // groups sit on opposite sides of the fighters in the draw order. Also
+  // called from the post-round "ended" display so blood doesn't vanish the
+  // instant a round ends - it used to only ever render from inside the
+  // active-combat branch of loop().
+  function drawGroundBlood() {
+    for (const decal of groundBlood) drawBloodSpot(ctx, decal);
+  }
+
+  // Impact/hit-point FX - static splats, the animated spatter burst, energy
+  // bursts, and the KO head-pop, all layered in front of both fighters (an
+  // impact flash should read clearly at the moment of the hit, unlike
+  // groundBlood's floor-level pooling). Ages/fades each on every call, so
+  // this must only be called once per rendered frame.
+  function drawBloodFX() {
+    for (let i = splatExtras.length - 1; i >= 0; i--) {
+      const s = splatExtras[i];
+      if (s.t >= SPLAT_EXTRA_LIFETIME_FRAMES) {
+        splatExtras.splice(i, 1);
+        continue;
+      }
+      const fadeIn = SPLAT_EXTRA_LIFETIME_FRAMES - SPLAT_EXTRA_FADE_FRAMES;
+      const alpha = s.t < fadeIn ? 1 : 1 - (s.t - fadeIn) / SPLAT_EXTRA_FADE_FRAMES;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      drawBloodSplatExtra(ctx, s.x, s.y, s.variant, s.rotation, s.scale);
+      ctx.restore();
+      s.t++;
+    }
+    for (let i = spatters.length - 1; i >= 0; i--) {
+      const s = spatters[i];
+      const spriteFrame = Math.floor(s.t / SPATTER_TICKS_PER_FRAME);
+      if (spriteFrame >= BLOOD_SPATTER_TOTAL_FRAMES) {
+        spatters.splice(i, 1);
+        continue;
+      }
+      drawBloodSpatter(ctx, s.x, s.y, spriteFrame, s.rotation);
+      s.t++;
+    }
+    for (let i = impacts.length - 1; i >= 0; i--) {
+      const im = impacts[i];
+      const spriteFrame = Math.floor(im.t / IMPACT_TICKS_PER_FRAME);
+      if (spriteFrame >= ENERGY_BURST_TOTAL_FRAMES) {
+        impacts.splice(i, 1);
+        continue;
+      }
+      drawEnergyBurst(ctx, im.x, im.y, spriteFrame);
+      im.t++;
+    }
+    for (let i = headPops.length - 1; i >= 0; i--) {
+      const p = headPops[i];
+      if (p.t >= HEAD_POP_DURATION) {
+        headPops.splice(i, 1);
+        continue;
+      }
+      drawHeadPop(ctx, p.x, p.y, p.t);
+      p.t++;
     }
   }
 
@@ -392,6 +458,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   function spawnProjectile(fighter) {
     if (fighter.lastEvent !== "special-release") return;
     const isRatRush = fighter.data.hoodieType === "Flipper";
+    if (!isRatRush) playSound("boltWhoosh", { volume: 0.6 });
     projectiles.push({
       kind: isRatRush ? "ratrush" : "bolt",
       x: fighter.x + BODY_CENTER_OFFSET + fighter.facing * 34,
@@ -423,7 +490,15 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         const hitRadius = isRatRush ? RAT_RUSH_HIT_RADIUS : PROJECTILE_HIT_RADIUS;
         if (Math.abs(targetCenterX - p.x) < hitRadius) {
           target.takeDamage(p.owner.specialDamage, p.x, "special");
-          p.owner.lastEvent = "special-hit";
+          // The bolt gets its own dedicated magic-impact sound instead of
+          // the generic special-hit thud everything else shares - it's
+          // meant to read as a complete impact on its own, not layer under
+          // the shared sound.
+          if (isRatRush) {
+            p.owner.lastEvent = "special-hit";
+          } else {
+            playSound("boltImpact", { volume: 0.7 });
+          }
           shake = Math.max(shake, SHAKE_ON_SPECIAL);
           flash = Math.max(flash, FLASH_ON_HIT);
           // Anchored at the projectile's actual position (the real contact
@@ -610,8 +685,10 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       p2.stateT++;
       ctx.save();
       drawArena(ctx, canvas.width, canvas.height);
+      drawGroundBlood();
       drawFighter(ctx, p1, 1);
       drawFighter(ctx, p2, 2);
+      drawBloodFX();
       ctx.restore();
       resultTimer--;
       if (resultTimer <= 0) {
@@ -673,11 +750,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       if (shake < 0.5) shake = 0;
     }
     drawArena(ctx, canvas.width, canvas.height);
-    // Ground blood is floor-level, so it draws before (behind) both
-    // fighters - a character standing on/near a pool should have their own
-    // legs occlude it, not float on top of it like a decal pasted over
-    // their sprite.
-    for (const decal of groundBlood) drawBloodSpot(ctx, decal);
+    drawGroundBlood();
     drawFighter(ctx, p1, 1);
     drawFighter(ctx, p2, 2);
     for (const p of projectiles) {
@@ -687,54 +760,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         drawSurgeBlast(ctx, p.x, p.y, Math.floor(p.t / PROJECTILE_SPRITE_TICKS_PER_FRAME), p.facing);
       }
     }
-    // Static splats layer behind the animated spatter burst, per the extra
-    // asset. Unlike groundBlood these are mid-air hit-point decals, not
-    // floor pooling - drawn in front of the fighters (an impact flash
-    // should read clearly at the moment of the hit) and aged out/faded
-    // rather than sticking around for the rest of the fight.
-    for (let i = splatExtras.length - 1; i >= 0; i--) {
-      const s = splatExtras[i];
-      if (s.t >= SPLAT_EXTRA_LIFETIME_FRAMES) {
-        splatExtras.splice(i, 1);
-        continue;
-      }
-      const fadeIn = SPLAT_EXTRA_LIFETIME_FRAMES - SPLAT_EXTRA_FADE_FRAMES;
-      const alpha = s.t < fadeIn ? 1 : 1 - (s.t - fadeIn) / SPLAT_EXTRA_FADE_FRAMES;
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      drawBloodSplatExtra(ctx, s.x, s.y, s.variant, s.rotation, s.scale);
-      ctx.restore();
-      s.t++;
-    }
-    for (let i = spatters.length - 1; i >= 0; i--) {
-      const s = spatters[i];
-      const spriteFrame = Math.floor(s.t / SPATTER_TICKS_PER_FRAME);
-      if (spriteFrame >= BLOOD_SPATTER_TOTAL_FRAMES) {
-        spatters.splice(i, 1);
-        continue;
-      }
-      drawBloodSpatter(ctx, s.x, s.y, spriteFrame, s.rotation);
-      s.t++;
-    }
-    for (let i = impacts.length - 1; i >= 0; i--) {
-      const im = impacts[i];
-      const spriteFrame = Math.floor(im.t / IMPACT_TICKS_PER_FRAME);
-      if (spriteFrame >= ENERGY_BURST_TOTAL_FRAMES) {
-        impacts.splice(i, 1);
-        continue;
-      }
-      drawEnergyBurst(ctx, im.x, im.y, spriteFrame);
-      im.t++;
-    }
-    for (let i = headPops.length - 1; i >= 0; i--) {
-      const p = headPops[i];
-      if (p.t >= HEAD_POP_DURATION) {
-        headPops.splice(i, 1);
-        continue;
-      }
-      drawHeadPop(ctx, p.x, p.y, p.t);
-      p.t++;
-    }
+    drawBloodFX();
     ctx.restore();
 
     if (flash > 0) {

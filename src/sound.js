@@ -7,6 +7,12 @@ const CLIPS = {
   ko: "assets/sounds/ko.mp3",
   powerfull: "assets/sounds/powerfull.mp3",
   uiclick: "assets/sounds/uiclick.mp3",
+  // Splice-licensed, not committed to the repo - see .gitignore and the
+  // README. Missing these two just means the bolt is quieter, not broken;
+  // initSound/playSound below already treat a failed/missing clip as a
+  // soft warning.
+  boltWhoosh: "assets/sounds/licensed/bolt-whoosh.mp3",
+  boltImpact: "assets/sounds/licensed/bolt-impact.mp3",
 };
 
 const TRACKS = [

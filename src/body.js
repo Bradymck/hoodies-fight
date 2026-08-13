@@ -12,6 +12,12 @@ const CROUCH_EXTRA_SCALE = 0.77;
 // same-sized character just knocked flat. ~78/62, matched to the standing
 // sheets' own frame size.
 const DEATH_EXTRA_SCALE = 1.3;
+// The death sheet's own content also doesn't reach the bottom of its frame
+// (~8.75px average gap across its 8 frames, measured against alpha) - the
+// frame's bottom edge is what's anchored to GROUND_Y, so that empty padding
+// otherwise floats the character's actual visible body above the ground
+// line. 8.75 * CHARACTER_SCALE(1.4) * DEATH_EXTRA_SCALE(1.3) ≈ 16.
+const DEATH_Y_OFFSET = 16;
 // Hodler's low-special sheet authors at 68px vs the standing sheets' 78px -
 // without this it reads as a hair smaller than every other pose instead of
 // matching. ~78/68.
@@ -125,6 +131,12 @@ const HEAD_ANCHORS = {
   // 7-frame low sweep special (Hodler) - crouched throughout, so y sits much
   // lower than the standing sheets (matches crouch's own anchor pattern).
   specialLow: [{"x":40.2,"y":20},{"x":38.7,"y":20},{"x":41.5,"y":20},{"x":35.9,"y":21},{"x":23.3,"y":21},{"x":25.8,"y":21},{"x":30.4,"y":21}],
+  // 8-frame collapse - the character genuinely tumbles as they go down, so
+  // unlike every other sheet the head anchor isn't a small wobble around one
+  // side, it swings from left (frames 0-2, still mostly upright) to right
+  // (frames 3-7, settling into the final sprawled pose) as part of the fall
+  // itself - verified against the art, not a fist/arm-style sampling error.
+  death: [{"x":13.3,"y":2},{"x":13.8,"y":4},{"x":14.4,"y":15},{"x":42.9,"y":18},{"x":47.1,"y":16},{"x":41.7,"y":19},{"x":43.6,"y":26},{"x":42.8,"y":27}],
 };
 
 const ANIMS = {
@@ -202,10 +214,19 @@ export function drawFighter(ctx, fighter, playerNum) {
   const isSpecial = state === "special";
 
   ctx.save();
+  // Every other draw function in this file sets this explicitly for its own
+  // decal/FX - this one never did, so a character render's crispness just
+  // depended on whatever imageSmoothingEnabled happened to be left at by
+  // the last unrelated draw call. Usually invisible at CHARACTER_SCALE's
+  // mild 1.4x, but stacked with a state-specific extra scale (DEATH_EXTRA_SCALE
+  // etc.) the softening became obviously visible. Always crisp now,
+  // regardless of ambient state or scale.
+  ctx.imageSmoothingEnabled = false;
   // frameSize is per-sheet (crouch's is shorter than the standing sheets),
   // so anchoring off it here naturally grounds the crouch pose without any
   // extra transform - a hunched sprite is just a shorter frame.
-  ctx.translate(x, GROUND_Y - frameSize * CHARACTER_SCALE - jumpOffset + CHARACTER_Y_OFFSET);
+  const deathYOffset = state === "ko" ? DEATH_Y_OFFSET : 0;
+  ctx.translate(x, GROUND_Y - frameSize * CHARACTER_SCALE - jumpOffset + CHARACTER_Y_OFFSET + deathYOffset);
   ctx.scale(CHARACTER_SCALE, CHARACTER_SCALE);
   // Every other pose faces the way this fighter is actually facing (always
   // toward the opponent). Knockback is the one exception - it's the fighter
@@ -220,10 +241,14 @@ export function drawFighter(ctx, fighter, playerNum) {
   }
 
   const isCrouch = state === "crouch";
-  // Crouch and specialLow both scale the body around the same bottom-center
-  // pivot (one shrinks, one grows) - see the comment on SPECIAL_LOW_EXTRA_SCALE
-  // above for why specialLow needs it. null means "no correction needed".
-  const extraScale = isCrouch ? CROUCH_EXTRA_SCALE : state === "specialLow" ? SPECIAL_LOW_EXTRA_SCALE : null;
+  // Crouch, specialLow, and ko all scale the body around the same bottom-
+  // center pivot (crouch shrinks, the other two grow) - see the comments on
+  // SPECIAL_LOW_EXTRA_SCALE/DEATH_EXTRA_SCALE above for why. null means "no
+  // correction needed". Folded into one shared branch (rather than a
+  // separate one for ko) so the head-anchor pivot correction below - which
+  // keys off this same variable - automatically covers ko too now that the
+  // head is drawn for it.
+  const extraScale = isCrouch ? CROUCH_EXTRA_SCALE : state === "specialLow" ? SPECIAL_LOW_EXTRA_SCALE : state === "ko" ? DEATH_EXTRA_SCALE : null;
 
   // The crouch source art draws the character filling notably more of its
   // frame than every other sheet (measured ~69% of frame width vs ~47% for
@@ -236,13 +261,6 @@ export function drawFighter(ctx, fighter, playerNum) {
   if (extraScale !== null) {
     ctx.translate(frameSize / 2, frameSize);
     ctx.scale(extraScale, extraScale);
-    ctx.translate(-frameSize / 2, -frameSize);
-  } else if (state === "ko") {
-    // Same bottom-center pivot as crouch, scaling up instead of down - keeps
-    // the now-larger lying-down body anchored to the ground instead of
-    // growing upward/off-position.
-    ctx.translate(frameSize / 2, frameSize);
-    ctx.scale(DEATH_EXTRA_SCALE, DEATH_EXTRA_SCALE);
     ctx.translate(-frameSize / 2, -frameSize);
   }
 
@@ -273,8 +291,11 @@ export function drawFighter(ctx, fighter, playerNum) {
   // (unshrunk) size - see isCrouch above. The head art itself is now
   // V-cropped at the bottom (see api.js cropToHeadShape) so its neck point
   // should land close to the body sprite's own collar V instead of
-  // overlapping the shoulders.
-  if (headImg && headImg.complete && state !== "ko") {
+  // overlapping the shoulders. Kept visible through ko too now - it used to
+  // vanish the instant a KO landed (paired with the head-pop FX burst), but
+  // that left the loser looking headless for the entire post-match result
+  // display, not just the brief pop moment.
+  if (headImg && headImg.complete) {
     const anchors = HEAD_ANCHORS[anim.sheet];
     let anchor = anchors ? anchors[frame % anchors.length] : { x: frameSize / 2, y: 10 };
     // Anchors are sampled against each sheet's own (unscaled) pixels, so

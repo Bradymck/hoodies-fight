@@ -1,2 +1,11 @@
 .vercel
 version.json
+
+# Splice.com sound samples - licensed for use in this game, but Splice's
+# terms don't allow redistributing the raw sample files themselves. See
+# README's Credits/License section. Anyone cloning this repo needs to
+# supply their own copies (or their own licensed sounds) at the same paths
+# for these effects to play - the game degrades gracefully without them
+# (see sound.js's initSound, which already treats a missing/failed clip as
+# a soft warning, not a crash).
+assets/sounds/licensed/
