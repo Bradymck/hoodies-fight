@@ -431,6 +431,40 @@ export function drawSurgeBlast(ctx, x, y, frame, facing) {
   ctx.restore();
 }
 
+// Flipper's special - a rat swarm rushing along the ground instead of a
+// ranged bolt (game.js owns its position/lifetime, same as the surge blast
+// above). 18 frames, rearing up then flattening into a low charge - cycled
+// on a loop while it travels rather than played once, so it reads as a
+// scuttling mass the whole time it's in flight.
+const RAT_RUSH_SHEET = loadImg("assets/fx/rat-rush.png");
+const RAT_RUSH_FRAME = 190;
+export const RAT_RUSH_TOTAL_FRAMES = 18;
+const RAT_RUSH_DRAW_SCALE = 0.55;
+
+// Ground-anchored (bottom edge at y, not center) unlike the head-height
+// surge blast - this is meant to be hugging the floor it's rushing across.
+export function drawRatRush(ctx, x, y, frame, facing) {
+  if (!RAT_RUSH_SHEET.complete || RAT_RUSH_SHEET.naturalWidth === 0) return;
+  const f = ((frame % RAT_RUSH_TOTAL_FRAMES) + RAT_RUSH_TOTAL_FRAMES) % RAT_RUSH_TOTAL_FRAMES;
+  const size = RAT_RUSH_FRAME * RAT_RUSH_DRAW_SCALE;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.translate(x, y);
+  if (facing === -1) ctx.scale(-1, 1);
+  ctx.drawImage(
+    RAT_RUSH_SHEET,
+    f * RAT_RUSH_FRAME,
+    0,
+    RAT_RUSH_FRAME,
+    RAT_RUSH_FRAME,
+    -size / 2,
+    -size,
+    size,
+    size,
+  );
+  ctx.restore();
+}
+
 // Impact burst where a projectile actually lands - plays through once, like
 // the melee blood-spatter burst, and is gone.
 const ENERGY_BURST_SHEET = loadImg("assets/fx/energy-burst.png");

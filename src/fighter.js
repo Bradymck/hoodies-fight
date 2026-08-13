@@ -53,6 +53,16 @@ const KNOCKBACK_ARC_HEIGHT = 55;
 // stand closer than 68px apart in the first place, so a 60px range could
 // never reach anyone even standing right next to you).
 export const UPPERCUT = { duration: 32, activeStart: 16, activeEnd: 30, damage: 14, range: 80, height: 90, knockback: 100 };
+// Archetype-specific specials - everyone still shares the same cast pose/
+// timing (SPECIAL.duration/release above), only what happens at the
+// release moment differs. Builder and Collector are both "high" (dodged by
+// a crouch or a jump, matching the bolt's own dodge rule); Flipper and
+// Hodler are both "low/ground" (only a jump clears them, matching the rat
+// rush - a ground attack can't be ducked under, you're already down there).
+// See spawnProjectile/checkBuilderSpecialHit/checkHodlerSpecialHit in
+// game.js for where each is actually resolved.
+export const BUILDER_SPECIAL = { damage: 30, range: 85 };
+export const HODLER_SPECIAL = { damage: 26, range: 92 };
 // Power now mostly comes from actually fighting - landing a hit or holding
 // a block - rather than sitting still. Passive trickle is deliberately
 // slow (was 0.15/frame, ~9/sec - fast enough that special was basically
@@ -301,6 +311,14 @@ export class Fighter {
     return SPECIAL.damage * this.archetype.damageMult;
   }
 
+  get builderSpecialDamage() {
+    return BUILDER_SPECIAL.damage * this.archetype.damageMult;
+  }
+
+  get hodlerSpecialDamage() {
+    return HODLER_SPECIAL.damage * this.archetype.damageMult;
+  }
+
   get slideDamage() {
     return SLIDE.damage * this.archetype.damageMult;
   }
@@ -320,11 +338,16 @@ export class Fighter {
   }
 
   takeDamage(amount, fromX, kind) {
+    // Hodler's own special is a holding stance, not just a strike - it
+    // blocks whatever the opponent throws at it the same as a real block,
+    // matching every other archetype's special still costing the same power
+    // and lockout window for the privilege.
+    const isHolding = this.data.hoodieType === "Hodler" && this.state === "special";
     // Specials and slides both blow straight through a raised guard - full
     // damage even if the defender was holding block when it landed. A slide
     // is meant to be dodged by jumping over it, not blocked; block doing
     // nothing against it makes that the actual answer instead of a false one.
-    if (this.state === "block" && kind !== "special" && kind !== "slide") {
+    if ((this.state === "block" || isHolding) && kind !== "special" && kind !== "slide") {
       this.health -= amount * 0.2 * this.archetype.blockMult;
       // A successful block is real defensive skill, not just standing
       // there - rewarding it with power gives blocking a reason to exist

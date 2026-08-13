@@ -9,6 +9,7 @@ import {
   pickBloodSplatVariant,
   drawHeadPop,
   drawSurgeBlast,
+  drawRatRush,
   drawEnergyBurst,
   BLOOD_SPATTER_TOTAL_FRAMES,
   SURGE_BLAST_TOTAL_FRAMES,
@@ -16,7 +17,7 @@ import {
   HEAD_POP_DURATION,
   GROUND_Y,
 } from "./body.js";
-import { MAX_POWER, SLIDE, UPPERCUT } from "./fighter.js";
+import { MAX_POWER, SLIDE, UPPERCUT, BUILDER_SPECIAL, HODLER_SPECIAL } from "./fighter.js";
 import { playSound } from "./sound.js";
 import { createAIController } from "./ai.js";
 import { speakTaunt } from "./tts.js";
@@ -73,6 +74,13 @@ const PROJECTILE_SPEED = 9;
 // center - roughly matches the fighter sprite's own on-screen body width.
 const PROJECTILE_HIT_RADIUS = 34;
 const PROJECTILE_SPRITE_TICKS_PER_FRAME = 2;
+// Flipper's rat rush - a ground-level swarm instead of a head-height bolt.
+// Slower than the bolt (a crawling mass, not a lobbed shot) but only
+// dodgeable by a jump - crouching doesn't help against something already at
+// ground level, matching the same rule as a slide.
+const RAT_RUSH_SPEED = 10;
+const RAT_RUSH_HIT_RADIUS = 45;
+const RAT_RUSH_SPRITE_TICKS_PER_FRAME = 3;
 // How fast the slide closes distance - faster than the projectile since
 // it's a ground rush, not a lobbed threat. SLIDE_SPEED * SLIDE.duration
 // (fighter.js) needs to comfortably clear the ~700px arena so it can still
@@ -319,6 +327,17 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
     if (Math.abs(attackerCenterX - defenderCenterX) >= SLIDE_HIT_RADIUS) return;
 
+    // A Hodler holding their own ground special isn't knocked back by a
+    // slide, and doesn't take damage from it either - the slider just stops
+    // dead on contact instead of connecting or passing through, because they
+    // hold their ground.
+    if (defender.data.hoodieType === "Hodler" && defender.state === "special") {
+      attacker.hasHit = true;
+      attacker.lastEvent = "slide-stopped";
+      shake = Math.max(shake, SHAKE_ON_HIT);
+      return;
+    }
+
     attacker.hasHit = true;
     defender.takeDamage(attacker.slideDamage, attacker.x, "slide");
     attacker.onLandedHit("slide");
@@ -360,15 +379,19 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   }
 
   // Fires the instant the cast animation completes (fighter.js sets this
-  // exactly once, at SPECIAL.release) - spawns a projectile at the caster's
-  // chest that travels on its own from here, independent of whatever the
-  // caster does next (they're free to move/block/get hit while it's in
-  // flight, same as a real ranged move).
+  // exactly once, at SPECIAL.release) - every archetype shares the same
+  // cast pose/timing, only what happens at release differs. Builder/Hodler
+  // resolve as an immediate melee hit instead (see checkBuilderSpecialHit/
+  // checkHodlerSpecialHit below) rather than spawning anything here.
   function spawnProjectile(fighter) {
     if (fighter.lastEvent !== "special-release") return;
+    const archetype = fighter.data.hoodieType;
+    if (archetype === "Builder" || archetype === "Hodler") return;
+    const isRatRush = archetype === "Flipper";
     projectiles.push({
+      kind: isRatRush ? "ratrush" : "bolt",
       x: fighter.x + BODY_CENTER_OFFSET + fighter.facing * 34,
-      y: PROJECTILE_Y,
+      y: isRatRush ? GROUND_Y : PROJECTILE_Y,
       facing: fighter.facing,
       owner: fighter,
       t: 0,
@@ -381,18 +404,20 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   function updateProjectiles() {
     for (let i = projectiles.length - 1; i >= 0; i--) {
       const p = projectiles[i];
-      p.x += PROJECTILE_SPEED * p.facing;
+      const isRatRush = p.kind === "ratrush";
+      p.x += (isRatRush ? RAT_RUSH_SPEED : PROJECTILE_SPEED) * p.facing;
       p.t++;
 
       const target = p.owner === p1 ? p2 : p1;
-      // Flies at head height (PROJECTILE_Y) specifically so a crouch - which
-      // ducks under kicks in checkHit - can duck under this too; jump still
-      // dodges it the same as every other attack. A raised guard does NOT
-      // stop it though, matching the old melee special's "blows straight
-      // through block" behavior (see takeDamage's kind check in fighter.js).
-      if (target.state !== "jump" && target.state !== "crouch") {
+      // The bolt flies at head height, so a crouch dodges it same as a
+      // jump. The rat rush is already on the ground - only a jump clears
+      // it, same rule as a slide. Neither is stopped by a raised guard,
+      // matching every other special's "blows straight through block".
+      const dodged = isRatRush ? target.state === "jump" : target.state === "jump" || target.state === "crouch";
+      if (!dodged) {
         const targetCenterX = target.x + BODY_CENTER_OFFSET;
-        if (Math.abs(targetCenterX - p.x) < PROJECTILE_HIT_RADIUS) {
+        const hitRadius = isRatRush ? RAT_RUSH_HIT_RADIUS : PROJECTILE_HIT_RADIUS;
+        if (Math.abs(targetCenterX - p.x) < hitRadius) {
           target.takeDamage(p.owner.specialDamage, p.x, "special");
           p.owner.lastEvent = "special-hit";
           shake = Math.max(shake, SHAKE_ON_SPECIAL);
@@ -402,9 +427,10 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
           // by the time this lands, so their own x would be the wrong place
           // to burst blood. spawnBloodEffects just needs something with an
           // .x/.state shape; this fakes a minimal "attacker" positioned
-          // exactly where the hit happened.
-          spawnBloodEffects(target, { x: p.x - BODY_CENTER_OFFSET, state: "special" });
-          impacts.push({ x: p.x, y: p.y, t: 0 });
+          // exactly where the hit happened - "slide" for the rat rush so the
+          // blood lands at ground height instead of the bolt's head height.
+          spawnBloodEffects(target, { x: p.x - BODY_CENTER_OFFSET, state: isRatRush ? "slide" : "special" });
+          impacts.push({ x: p.x, y: isRatRush ? GROUND_Y - 20 : p.y, t: 0 });
           projectiles.splice(i, 1);
           continue;
         }
@@ -416,6 +442,47 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         projectiles.splice(i, 1);
       }
     }
+  }
+
+  // Builder's special - a bigger high strike thrown the instant the shared
+  // cast animation releases, dodged the same way the bolt is (crouch or
+  // jump both clear it) since unlike the free universal uppercut, this
+  // isn't meant to be an anti-air counter.
+  function checkBuilderSpecialHit(attacker, defender) {
+    if (attacker.lastEvent !== "special-release") return;
+    if (attacker.data.hoodieType !== "Builder") return;
+    if (defender.state === "crouch" || defender.state === "jump") return;
+    const attackerCenterX = attacker.x + BODY_CENTER_OFFSET;
+    const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
+    if (Math.abs(attackerCenterX - defenderCenterX) >= BUILDER_SPECIAL.range) return;
+
+    defender.takeDamage(attacker.builderSpecialDamage, attacker.x, "special");
+    attacker.onLandedHit("special");
+    attacker.lastEvent = "special-hit";
+    shake = Math.max(shake, SHAKE_ON_SPECIAL);
+    flash = Math.max(flash, FLASH_ON_HIT);
+    spawnBloodEffects(defender, { x: attacker.x, state: "uppercut" });
+  }
+
+  // Hodler's special - a close ground sweep, only dodged by a jump (same
+  // rule as the rat rush - it's already at ground level, ducking doesn't
+  // get you out of its way). See takeDamage's isHolding check for how this
+  // also blocks whatever the opponent throws back during the same window,
+  // and updateSlide above for how it stops a slide dead instead of trading.
+  function checkHodlerSpecialHit(attacker, defender) {
+    if (attacker.lastEvent !== "special-release") return;
+    if (attacker.data.hoodieType !== "Hodler") return;
+    if (defender.state === "jump") return;
+    const attackerCenterX = attacker.x + BODY_CENTER_OFFSET;
+    const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
+    if (Math.abs(attackerCenterX - defenderCenterX) >= HODLER_SPECIAL.range) return;
+
+    defender.takeDamage(attacker.hodlerSpecialDamage, attacker.x, "special");
+    attacker.onLandedHit("special");
+    attacker.lastEvent = "special-hit";
+    shake = Math.max(shake, SHAKE_ON_SPECIAL);
+    flash = Math.max(flash, FLASH_ON_HIT);
+    spawnBloodEffects(defender, { x: attacker.x, state: "kick" });
   }
 
   function handleSounds(fighter) {
@@ -432,6 +499,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         });
         break;
       case "block-taken":
+      case "slide-stopped":
         playSound("block");
         break;
       case "hit-taken":
@@ -562,6 +630,10 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     // handleSounds to actually see it rather than one frame late.
     spawnProjectile(p1);
     spawnProjectile(p2);
+    checkBuilderSpecialHit(p1, p2);
+    checkBuilderSpecialHit(p2, p1);
+    checkHodlerSpecialHit(p1, p2);
+    checkHodlerSpecialHit(p2, p1);
     updateProjectiles();
     // Keep both fighters facing each other regardless of which physical
     // side they're actually standing on - computed last, after every move
@@ -594,7 +666,11 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     drawFighter(ctx, p1, 1);
     drawFighter(ctx, p2, 2);
     for (const p of projectiles) {
-      drawSurgeBlast(ctx, p.x, p.y, Math.floor(p.t / PROJECTILE_SPRITE_TICKS_PER_FRAME), p.facing);
+      if (p.kind === "ratrush") {
+        drawRatRush(ctx, p.x, p.y, Math.floor(p.t / RAT_RUSH_SPRITE_TICKS_PER_FRAME), p.facing);
+      } else {
+        drawSurgeBlast(ctx, p.x, p.y, Math.floor(p.t / PROJECTILE_SPRITE_TICKS_PER_FRAME), p.facing);
+      }
     }
     // Ground blood draws in front of both fighters, not underneath - at
     // close range a lunging attack sprite can visually overlap the
