@@ -331,7 +331,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     // slide, and doesn't take damage from it either - the slider just stops
     // dead on contact instead of connecting or passing through, because they
     // hold their ground.
-    if (defender.data.hoodieType === "Hodler" && defender.state === "special") {
+    if (defender.data.hoodieType === "Hodler" && defender.state === "specialLow") {
       attacker.hasHit = true;
       attacker.lastEvent = "slide-stopped";
       shake = Math.max(shake, SHAKE_ON_HIT);
@@ -378,16 +378,15 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     spawnBloodEffects(defender, attacker);
   }
 
-  // Fires the instant the cast animation completes (fighter.js sets this
-  // exactly once, at SPECIAL.release) - every archetype shares the same
-  // cast pose/timing, only what happens at release differs. Builder/Hodler
-  // resolve as an immediate melee hit instead (see checkBuilderSpecialHit/
-  // checkHodlerSpecialHit below) rather than spawning anything here.
+  // Fires the instant the shared cast animation completes (fighter.js sets
+  // this exactly once, at SPECIAL.release) - only ever reached by Flipper/
+  // Collector now, since Builder/Hodler have their own dedicated melee
+  // states (specialHigh/specialLow) with their own active-hitbox window
+  // instead of this cast-then-release pose (see checkBuilderSpecialHit/
+  // checkHodlerSpecialHit below).
   function spawnProjectile(fighter) {
     if (fighter.lastEvent !== "special-release") return;
-    const archetype = fighter.data.hoodieType;
-    if (archetype === "Builder" || archetype === "Hodler") return;
-    const isRatRush = archetype === "Flipper";
+    const isRatRush = fighter.data.hoodieType === "Flipper";
     projectiles.push({
       kind: isRatRush ? "ratrush" : "bolt",
       x: fighter.x + BODY_CENTER_OFFSET + fighter.facing * 34,
@@ -444,18 +443,21 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     }
   }
 
-  // Builder's special - a bigger high strike thrown the instant the shared
-  // cast animation releases, dodged the same way the bolt is (crouch or
-  // jump both clear it) since unlike the free universal uppercut, this
-  // isn't meant to be an anti-air counter.
+  // Builder's special - a big high kick with its own dedicated animation
+  // (specialHigh), active window timed to when the sheet's own impact FX
+  // actually shows the kick connecting. Dodged the same way the bolt is
+  // (crouch or jump both clear it) since unlike the free universal
+  // uppercut, this isn't meant to be an anti-air counter.
   function checkBuilderSpecialHit(attacker, defender) {
-    if (attacker.lastEvent !== "special-release") return;
-    if (attacker.data.hoodieType !== "Builder") return;
+    if (attacker.state !== "specialHigh") return;
+    if (attacker.stateT < BUILDER_SPECIAL.activeStart || attacker.stateT > BUILDER_SPECIAL.activeEnd) return;
+    if (attacker.hasHit) return;
     if (defender.state === "crouch" || defender.state === "jump") return;
     const attackerCenterX = attacker.x + BODY_CENTER_OFFSET;
     const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
     if (Math.abs(attackerCenterX - defenderCenterX) >= BUILDER_SPECIAL.range) return;
 
+    attacker.hasHit = true;
     defender.takeDamage(attacker.builderSpecialDamage, attacker.x, "special");
     attacker.onLandedHit("special");
     attacker.lastEvent = "special-hit";
@@ -464,19 +466,22 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     spawnBloodEffects(defender, { x: attacker.x, state: "uppercut" });
   }
 
-  // Hodler's special - a close ground sweep, only dodged by a jump (same
-  // rule as the rat rush - it's already at ground level, ducking doesn't
-  // get you out of its way). See takeDamage's isHolding check for how this
-  // also blocks whatever the opponent throws back during the same window,
-  // and updateSlide above for how it stops a slide dead instead of trading.
+  // Hodler's special - a close ground sweep with its own dedicated
+  // animation (specialLow), only dodged by a jump (same rule as the rat
+  // rush - it's already at ground level, ducking doesn't get you out of its
+  // way). See takeDamage's isHolding check for how this also blocks
+  // whatever the opponent throws back during the same window, and
+  // updateSlide above for how it stops a slide dead instead of trading.
   function checkHodlerSpecialHit(attacker, defender) {
-    if (attacker.lastEvent !== "special-release") return;
-    if (attacker.data.hoodieType !== "Hodler") return;
+    if (attacker.state !== "specialLow") return;
+    if (attacker.stateT < HODLER_SPECIAL.activeStart || attacker.stateT > HODLER_SPECIAL.activeEnd) return;
+    if (attacker.hasHit) return;
     if (defender.state === "jump") return;
     const attackerCenterX = attacker.x + BODY_CENTER_OFFSET;
     const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
     if (Math.abs(attackerCenterX - defenderCenterX) >= HODLER_SPECIAL.range) return;
 
+    attacker.hasHit = true;
     defender.takeDamage(attacker.hodlerSpecialDamage, attacker.x, "special");
     attacker.onLandedHit("special");
     attacker.lastEvent = "special-hit";

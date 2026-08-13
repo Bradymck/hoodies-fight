@@ -12,6 +12,10 @@ const CROUCH_EXTRA_SCALE = 0.77;
 // same-sized character just knocked flat. ~78/62, matched to the standing
 // sheets' own frame size.
 const DEATH_EXTRA_SCALE = 1.3;
+// Hodler's low-special sheet authors at 68px vs the standing sheets' 78px -
+// without this it reads as a hair smaller than every other pose instead of
+// matching. ~78/68.
+const SPECIAL_LOW_EXTRA_SCALE = 1.15;
 const ARENA_BACKGROUNDS = [
   loadImg("assets/backgrounds/arena-2.png"),
   loadImg("assets/backgrounds/arena-3.png"),
@@ -68,6 +72,11 @@ const SHEETS = {
   // Post-match victory pose - only ever entered externally by game.js when
   // a round ends, never by player input.
   flex: { img: loadImg("assets/sprites/flex.png"), frameSize: 78 },
+  // Builder/Hodler's dedicated melee specials (see fighter.js's
+  // specialHigh/specialLow states) - a real high/low kick each, instead of
+  // sharing the ranged-cast "spellcast" pose every other archetype uses.
+  specialHigh: { img: loadImg("assets/sprites/special-high.png"), frameSize: 78 },
+  specialLow: { img: loadImg("assets/sprites/special-low.png"), frameSize: 68 },
 };
 
 // Per-frame neck/collar anchor points, sampled directly from each sheet's
@@ -100,15 +109,22 @@ const HEAD_ANCHORS = {
   slide: [{"x":13.5,"y":2}],
   // Single mid-air knocked-back pose.
   knockback: [{"x":63.0,"y":4}],
-  // 8-frame crouch-charge-into-upward-strike - same sampling method as
-  // every other multi-frame sheet.
-  // Frames 5-6 (the punch's peak/follow-through) had the raised fist
-  // hijacking the topmost-opaque-pixel sample instead of the hood/collar -
-  // re-sampled restricted to the body's central column so the arm can't
-  // throw it off; frame 6 in particular was off by ~10px toward the fist.
-  uppercut: [{"x":37.8,"y":-7},{"x":38.0,"y":-7},{"x":38.8,"y":3},{"x":39.7,"y":9},{"x":38.9,"y":10},{"x":46.2,"y":-7},{"x":45.1,"y":0},{"x":42.3,"y":-6}],
+  // 4-frame crouch-charge-into-upward-strike, replacing the old 8-frame
+  // sheet (shorter/faster, real crouch on frame 0). Frame 2 (the punch
+  // connecting) again had the raised fist hijacking the topmost-opaque-
+  // pixel sample instead of the hood - re-sampled restricted to the body's
+  // central column, same fix as the old sheet needed.
+  uppercut: [{"x":39.7,"y":10},{"x":46.2,"y":-7},{"x":44.2,"y":0},{"x":42.3,"y":-6}],
   // 8-frame crouch-into-flex victory pose - same sampling method.
   flex: [{"x":37.8,"y":-7},{"x":38.4,"y":-4},{"x":38.0,"y":5},{"x":38.0,"y":7},{"x":37.9,"y":7},{"x":41.3,"y":5},{"x":42.8,"y":-1},{"x":40.0,"y":-2}],
+  // 15-frame high-kick special (Builder) - windup/lean, kick, recovery.
+  // Sampled the same way as every other multi-frame sheet; no fist/arm to
+  // hijack it this time since it's a leg strike, values track the head/
+  // hood cleanly throughout.
+  specialHigh: [{"x":38.2,"y":-7},{"x":38.2,"y":-7},{"x":37.8,"y":-7},{"x":37.6,"y":-6},{"x":38.7,"y":-5},{"x":30.8,"y":-6},{"x":25.4,"y":-5},{"x":35.9,"y":-5},{"x":39.4,"y":-5},{"x":38.0,"y":-5},{"x":36.4,"y":-4},{"x":35.5,"y":-4},{"x":36.0,"y":-5},{"x":36.1,"y":-5},{"x":37.0,"y":-6}],
+  // 7-frame low sweep special (Hodler) - crouched throughout, so y sits much
+  // lower than the standing sheets (matches crouch's own anchor pattern).
+  specialLow: [{"x":40.2,"y":20},{"x":38.7,"y":20},{"x":41.5,"y":20},{"x":35.9,"y":21},{"x":23.3,"y":21},{"x":25.8,"y":21},{"x":30.4,"y":21}],
 };
 
 const ANIMS = {
@@ -134,12 +150,12 @@ const ANIMS = {
   slide: { sheet: "slide", frames: 1, durationFrames: 44, loop: false },
   // Single still frame held while knocked back from a connecting slide.
   knockback: { sheet: "knockback", frames: 1, durationFrames: 28, loop: false },
-  // durationFrames (32) over 8 sheet frames matches UPPERCUT.duration in
-  // fighter.js.
-  uppercut: { sheet: "uppercut", frames: 8, durationFrames: 32, loop: false },
+  // durationFrames (24) over the sheet's 4 frames matches UPPERCUT.duration
+  // in fighter.js - shorter/faster sheet, shorter duration to match.
+  uppercut: { sheet: "uppercut", frames: 4, durationFrames: 24, loop: false },
   // Held while charging (see fighter.js's uppercut-charge state) - frozen
-  // on the same sheet's frame 0, the wind-up's very first pose, for however
-  // long the key stays down.
+  // on the same sheet's frame 0, the wind-up's very first pose (a real
+  // crouch on the current sheet), for however long the key stays down.
   "uppercut-charge": { sheet: "uppercut", frames: 1, durationFrames: 1, loop: false },
   // Slowed from 60 (a blink-and-you-miss-it 1s) to actually read as a
   // collapse instead of a flicker.
@@ -149,6 +165,11 @@ const ANIMS = {
   // much longer the post-match display runs - not looped, so it doesn't
   // visibly crouch back down and repeat mid-celebration.
   flex: { sheet: "flex", frames: 8, durationFrames: 40, loop: false },
+  // durationFrames (45)/(28) match BUILDER_SPECIAL.duration/HODLER_SPECIAL.duration
+  // in fighter.js - active-hitbox window (game.js) is timed to whichever
+  // frames the sheet's own impact FX actually shows the kick connecting.
+  specialHigh: { sheet: "specialHigh", frames: 15, durationFrames: 45, loop: false },
+  specialLow: { sheet: "specialLow", frames: 7, durationFrames: 28, loop: false },
 };
 
 const TINTS = {
@@ -199,18 +220,22 @@ export function drawFighter(ctx, fighter, playerNum) {
   }
 
   const isCrouch = state === "crouch";
+  // Crouch and specialLow both scale the body around the same bottom-center
+  // pivot (one shrinks, one grows) - see the comment on SPECIAL_LOW_EXTRA_SCALE
+  // above for why specialLow needs it. null means "no correction needed".
+  const extraScale = isCrouch ? CROUCH_EXTRA_SCALE : state === "specialLow" ? SPECIAL_LOW_EXTRA_SCALE : null;
 
   // The crouch source art draws the character filling notably more of its
   // frame than every other sheet (measured ~69% of frame width vs ~47% for
   // idle/walk/etc), so at the same CHARACTER_SCALE it read as the character
   // visibly growing on the squat instead of just hunching down. Only the
-  // body sprite is scaled down here (in its own save/restore) - the head is
+  // body sprite is scaled here (in its own save/restore) - the head is
   // drawn afterward at its normal size, just repositioned to follow, so
-  // ducking shrinks the body without also shrinking the head.
+  // this never also shrinks/grows the head.
   ctx.save();
-  if (isCrouch) {
+  if (extraScale !== null) {
     ctx.translate(frameSize / 2, frameSize);
-    ctx.scale(CROUCH_EXTRA_SCALE, CROUCH_EXTRA_SCALE);
+    ctx.scale(extraScale, extraScale);
     ctx.translate(-frameSize / 2, -frameSize);
   } else if (state === "ko") {
     // Same bottom-center pivot as crouch, scaling up instead of down - keeps
@@ -252,15 +277,15 @@ export function drawFighter(ctx, fighter, playerNum) {
   if (headImg && headImg.complete && state !== "ko") {
     const anchors = HEAD_ANCHORS[anim.sheet];
     let anchor = anchors ? anchors[frame % anchors.length] : { x: frameSize / 2, y: 10 };
-    // Anchors are sampled against the crouch sheet's own (unscaled) pixels,
-    // so they need the same pivot transform applied above to still land on
-    // the now-shrunk body instead of where the head used to sit.
-    if (isCrouch) {
+    // Anchors are sampled against each sheet's own (unscaled) pixels, so
+    // they need the same pivot transform applied above to still land on the
+    // now-resized body instead of where the head used to sit.
+    if (extraScale !== null) {
       const pivotX = frameSize / 2;
       const pivotY = frameSize;
       anchor = {
-        x: (anchor.x - pivotX) * CROUCH_EXTRA_SCALE + pivotX,
-        y: (anchor.y - pivotY) * CROUCH_EXTRA_SCALE + pivotY,
+        x: (anchor.x - pivotX) * extraScale + pivotX,
+        y: (anchor.y - pivotY) * extraScale + pivotY,
       };
     }
 

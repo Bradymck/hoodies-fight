@@ -51,18 +51,20 @@ const KNOCKBACK_ARC_HEIGHT = 55;
 // MIN_FIGHTER_GAP (68, game.js) same as every melee range does - a range of
 // 60 here missed every time (verified live: two grounded fighters can never
 // stand closer than 68px apart in the first place, so a 60px range could
-// never reach anyone even standing right next to you).
-export const UPPERCUT = { duration: 32, activeStart: 16, activeEnd: 30, damage: 14, range: 80, height: 90, knockback: 100 };
-// Archetype-specific specials - everyone still shares the same cast pose/
-// timing (SPECIAL.duration/release above), only what happens at the
-// release moment differs. Builder and Collector are both "high" (dodged by
-// a crouch or a jump, matching the bolt's own dodge rule); Flipper and
-// Hodler are both "low/ground" (only a jump clears them, matching the rat
-// rush - a ground attack can't be ducked under, you're already down there).
-// See spawnProjectile/checkBuilderSpecialHit/checkHodlerSpecialHit in
-// game.js for where each is actually resolved.
-export const BUILDER_SPECIAL = { damage: 30, range: 85 };
-export const HODLER_SPECIAL = { damage: 26, range: 92 };
+// never reach anyone even standing right next to you). Sheet swapped to a
+// shorter 4-frame version (from 8) with a real crouch on frame 0 - duration
+// shortened to match, active window re-timed to the new sheet's actual
+// punch-connects frame (frame 2, verified against the art).
+export const UPPERCUT = { duration: 24, activeStart: 12, activeEnd: 19, damage: 14, range: 80, height: 90, knockback: 100 };
+// Archetype-specific specials. Flipper (rat rush) and Collector (bolt) are
+// ranged, spawned via spawnProjectile in game.js off the shared "special"
+// cast pose. Builder and Hodler are melee with their own dedicated sheets/
+// states (specialHigh/specialLow, see body.js) instead of sharing the cast
+// pose - duration/activeStart/activeEnd here time their own active-hitbox
+// window the same way UPPERCUT/KICK do, verified against which frames of
+// each sheet actually show the kick connecting (green impact FX).
+export const BUILDER_SPECIAL = { damage: 30, range: 85, duration: 45, activeStart: 21, activeEnd: 36 };
+export const HODLER_SPECIAL = { damage: 26, range: 92, duration: 28, activeStart: 20, activeEnd: 27 };
 // Power now mostly comes from actually fighting - landing a hit or holding
 // a block - rather than sitting still. Passive trickle is deliberately
 // slow (was 0.15/frame, ~9/sec - fast enough that special was basically
@@ -106,7 +108,10 @@ export class Fighter {
     this.state = "idle";
     this.stateT = 0;
     this.health = this.maxHealth;
-    this.power = 0;
+    // Starting empty against an AI that can already fight back from frame
+    // one felt unwinnable, not tense - starting full gives both sides an
+    // opening special/kick to actually work with.
+    this.power = MAX_POWER;
     this.hasHit = false;
     // Set by the caller (game.js) right after a hit/action lands, so it can
     // trigger the matching sound effect without fighter.js knowing about audio.
@@ -176,11 +181,13 @@ export class Fighter {
     // hit detection for them, this just counts down back to idle. knockback
     // is never entered via input at all (see takeDamage), only ever reached
     // by getting hit by a slide.
-    if (["punch", "kick", "special", "hitstun", "slide", "knockback", "uppercut"].includes(this.state)) {
+    if (["punch", "kick", "special", "specialHigh", "specialLow", "hitstun", "slide", "knockback", "uppercut"].includes(this.state)) {
       const durations = {
         punch: PUNCH.duration,
         kick: KICK.duration,
         special: SPECIAL.duration,
+        specialHigh: BUILDER_SPECIAL.duration,
+        specialLow: HODLER_SPECIAL.duration,
         hitstun: HITSTUN_FRAMES,
         slide: SLIDE.duration,
         knockback: KNOCKBACK_DURATION,
@@ -240,7 +247,12 @@ export class Fighter {
     }
     if (input.special && this.power >= SPECIAL.cost) {
       this.spendPower(SPECIAL.cost);
-      this.setState("special");
+      // Builder/Hodler get their own dedicated melee states (see body.js's
+      // specialHigh/specialLow) instead of the shared ranged-cast pose -
+      // see checkBuilderSpecialHit/checkHodlerSpecialHit in game.js for
+      // where their actual hit window is checked.
+      const type = this.data.hoodieType;
+      this.setState(type === "Builder" ? "specialHigh" : type === "Hodler" ? "specialLow" : "special");
       this.lastEvent = "special-start";
       return;
     }
@@ -359,7 +371,7 @@ export class Fighter {
     // blocks whatever the opponent throws at it the same as a real block,
     // matching every other archetype's special still costing the same power
     // and lockout window for the privilege.
-    const isHolding = this.data.hoodieType === "Hodler" && this.state === "special";
+    const isHolding = this.data.hoodieType === "Hodler" && this.state === "specialLow";
     // Specials and slides both blow straight through a raised guard - full
     // damage even if the defender was holding block when it landed. A slide
     // is meant to be dodged by jumping over it, not blocked; block doing
