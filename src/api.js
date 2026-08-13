@@ -32,17 +32,20 @@ async function apiFetch(path) {
   throw lastErr;
 }
 
-// Response shape isn't confirmed live (the API's been intermittently
-// unreachable while building this) - defensively checks the plausible
-// field names rather than assuming one, so this doesn't silently break if
-// it's `hoodies`/`tokens`/a bare array/objects vs raw IDs.
+// Confirmed live: the real response shape is {address, count, items: [{tokenId, ...}], next} -
+// `items` is what actually comes back, not `hoodies`/`tokens` (both guesses
+// from before this was ever confirmed against a live wallet - the API was
+// always returning real data under `items`, so every wallet was silently
+// reading as empty regardless of what it actually held). Kept the old
+// guesses as a fallback in case the shape ever varies, but `items` is the
+// one to trust.
 export async function fetchWalletHoodies(address) {
   try {
     const res = await apiFetch(`/wallet/${address}/hoodies`);
     if (!res.ok) throw new Error(`Could not load Hoodies for ${address}`);
     const data = await res.json();
-    const list = data?.hoodies ?? data?.tokens ?? (Array.isArray(data) ? data : []);
-    return list.map((entry) => (typeof entry === "object" ? entry.id ?? entry.tokenId : entry));
+    const list = data?.items ?? data?.hoodies ?? data?.tokens ?? (Array.isArray(data) ? data : []);
+    return list.map((entry) => (typeof entry === "object" ? entry.tokenId ?? entry.id : entry));
   } catch (err) {
     // Same "only once retries are exhausted" gate as fetchToken - a real
     // 404/error from the API stays as-is, only its own connectivity failure
