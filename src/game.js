@@ -22,6 +22,7 @@ import { playSound } from "./sound.js";
 import { createAIController } from "./ai.js";
 import { speakTaunt } from "./tts.js";
 import { isBloodUnlocked } from "./blood-code.js";
+import { reportMatchResult } from "./api.js";
 
 const KEYMAP = {
   p1: {
@@ -666,6 +667,9 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       titleEl.textContent = `${label} WINS!`;
       quoteEl.textContent = quote ? `"${quote}"` : "";
       speakTaunt(quote);
+      const loser = winner === p1 ? p2 : p1;
+      reportMatchResult(winner.data.tokenId, loser.data.tokenId, "win");
+      reportMatchResult(loser.data.tokenId, winner.data.tokenId, "loss");
     } else {
       titleEl.textContent = "DRAW";
       quoteEl.textContent = "";

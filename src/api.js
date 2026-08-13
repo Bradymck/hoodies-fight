@@ -157,6 +157,19 @@ async function fetchTransparentHeadDataUri(svgUrl) {
   return cropToHeadShape(svgDataUri);
 }
 
+// Our own backend (api/match-result.js), not the OnChainHoodies API - hence
+// no BASE prefix. Fire-and-forget by design: the match result already
+// finished playing out client-side by the time this fires, so a slow or
+// failed request should never hold up or break the result screen. Same
+// fail-soft philosophy as fetchHoodTalk above.
+export function reportMatchResult(tokenId, opponentTokenId, result) {
+  fetch("/api/match-result", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tokenId, opponentTokenId, result }),
+  }).catch(() => {});
+}
+
 export async function loadFighterData(tokenId) {
   const [token, talk, talkHistory] = await Promise.all([
     fetchToken(tokenId),
