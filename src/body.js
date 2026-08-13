@@ -467,6 +467,12 @@ const RAT_RUSH_SHEET = loadImg("assets/fx/rat-rush.png");
 const RAT_RUSH_FRAME = 190;
 export const RAT_RUSH_TOTAL_FRAMES = 18;
 const RAT_RUSH_DRAW_SCALE = 0.55;
+// The rat art itself only fills each 190px frame down to row ~148 - there's
+// a consistent ~41px transparent gap below the rats in every frame (measured
+// via alpha bounding box). Anchoring the frame's bottom edge to ground level
+// left the rats floating in that gap - 41 * RAT_RUSH_DRAW_SCALE ≈ 23px offset
+// pushes the actual rat art down to the real ground line instead.
+const RAT_RUSH_Y_OFFSET = 23;
 
 // Ground-anchored (bottom edge at y, not center) unlike the head-height
 // surge blast - this is meant to be hugging the floor it's rushing across.
@@ -476,7 +482,7 @@ export function drawRatRush(ctx, x, y, frame, facing) {
   const size = RAT_RUSH_FRAME * RAT_RUSH_DRAW_SCALE;
   ctx.save();
   ctx.imageSmoothingEnabled = false;
-  ctx.translate(x, y);
+  ctx.translate(x, y + RAT_RUSH_Y_OFFSET);
   if (facing === -1) ctx.scale(-1, 1);
   ctx.drawImage(
     RAT_RUSH_SHEET,
