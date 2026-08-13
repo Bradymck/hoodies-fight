@@ -130,27 +130,6 @@ async function cropToHeadShape(svgDataUri) {
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(img, 0, 0, size, size);
 
-  // Sample a representative face color before clipping - the source bust
-  // art's neck/collar band is often a visibly different, more contrasting
-  // color (shading, a shirt collar) than the face itself, which reads as an
-  // ugly seam right at the neck once this is composited onto the body
-  // sprite's own hood collar below.
-  const sample = ctx.getImageData(
-    Math.floor(size * 0.4),
-    Math.floor(size * 0.22),
-    Math.floor(size * 0.2),
-    Math.floor(size * 0.2),
-  ).data;
-  let r = 0, g = 0, b = 0, count = 0;
-  for (let i = 0; i < sample.length; i += 4) {
-    if (sample[i + 3] < 40) continue;
-    r += sample[i];
-    g += sample[i + 1];
-    b += sample[i + 2];
-    count++;
-  }
-  const faceColor = count > 0 ? `rgb(${Math.round(r / count)}, ${Math.round(g / count)}, ${Math.round(b / count)})` : null;
-
   const neckY = size * 0.62;
   const bottomY = size * 0.85;
   const centerX = size / 2;
@@ -163,16 +142,6 @@ async function cropToHeadShape(svgDataUri) {
   ctx.lineTo(0, neckY);
   ctx.closePath();
   ctx.fill();
-
-  // Recolor just the tapered neck band to the sampled face color -
-  // "source-atop" only paints over pixels that are already opaque, so the
-  // taper's own shape/antialiased edge survives, only the color changes.
-  if (faceColor) {
-    ctx.globalCompositeOperation = "source-atop";
-    ctx.fillStyle = faceColor;
-    ctx.fillRect(0, neckY, size, bottomY - neckY);
-    ctx.globalCompositeOperation = "source-over";
-  }
 
   return canvas.toDataURL("image/png");
 }
