@@ -200,6 +200,37 @@ h1 {
   padding: 4px;
 }
 
+.grid-loading {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 0;
+}
+
+.grid-loading p {
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: #ffe066;
+  text-shadow: 0 0 6px #ffe06699;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 4px solid #ffe06633;
+  border-top-color: #3ddc3d;
+  border-right-color: #ffe066;
+  animation: spin 0.8s linear infinite;
+  box-shadow: 0 0 12px #3ddc3d44;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .character-card {
   background: #1a1a22;
   border: 2px solid #444;

@@ -506,7 +506,8 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     if (winner) {
       winner.setState("flex");
       const quote = pickVictoryQuote(winner);
-      titleEl.textContent = `${winner.name} WINS!`;
+      const label = winner === p1 ? "PLAYER ONE" : "PLAYER TWO";
+      titleEl.textContent = `${label} WINS!`;
       quoteEl.textContent = quote ? `"${quote}"` : "";
       speakTaunt(quote);
     } else {

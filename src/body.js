@@ -6,6 +6,12 @@ const CHARACTER_SCALE = 1.4;
 // sheets - see the comment where this is applied in drawFighter for the
 // measured numbers behind it.
 const CROUCH_EXTRA_SCALE = 0.77;
+// The death sheet fits a full lying-down body into a 62px frame, notably
+// narrower than the 78-86px the standing sheets author their (taller,
+// upright) art at - without this it reads as a shrunken doll instead of the
+// same-sized character just knocked flat. ~78/62, matched to the standing
+// sheets' own frame size.
+const DEATH_EXTRA_SCALE = 1.3;
 const PLATFORM_TILE_COUNT = 4;
 // How far the platform texture extends above GROUND_Y - see drawArena.
 const PLATFORM_TOP_OVERSCAN = 24;
@@ -101,7 +107,11 @@ const HEAD_ANCHORS = {
   knockback: [{"x":63.0,"y":4}],
   // 8-frame crouch-charge-into-upward-strike - same sampling method as
   // every other multi-frame sheet.
-  uppercut: [{"x":37.8,"y":-7},{"x":38.0,"y":-7},{"x":38.8,"y":3},{"x":39.7,"y":9},{"x":38.9,"y":10},{"x":45.3,"y":-7},{"x":55.3,"y":-5},{"x":42.4,"y":-6}],
+  // Frames 5-6 (the punch's peak/follow-through) had the raised fist
+  // hijacking the topmost-opaque-pixel sample instead of the hood/collar -
+  // re-sampled restricted to the body's central column so the arm can't
+  // throw it off; frame 6 in particular was off by ~10px toward the fist.
+  uppercut: [{"x":37.8,"y":-7},{"x":38.0,"y":-7},{"x":38.8,"y":3},{"x":39.7,"y":9},{"x":38.9,"y":10},{"x":46.2,"y":-7},{"x":45.1,"y":0},{"x":42.3,"y":-6}],
   // 8-frame crouch-into-flex victory pose - same sampling method.
   flex: [{"x":37.8,"y":-7},{"x":38.4,"y":-4},{"x":38.0,"y":5},{"x":38.0,"y":7},{"x":37.9,"y":7},{"x":41.3,"y":5},{"x":42.8,"y":-1},{"x":40.0,"y":-2}],
 };
@@ -132,7 +142,9 @@ const ANIMS = {
   // durationFrames (32) over 8 sheet frames matches UPPERCUT.duration in
   // fighter.js.
   uppercut: { sheet: "uppercut", frames: 8, durationFrames: 32, loop: false },
-  ko: { sheet: "death", frames: 8, durationFrames: 60, loop: false },
+  // Slowed from 60 (a blink-and-you-miss-it 1s) to actually read as a
+  // collapse instead of a flicker.
+  ko: { sheet: "death", frames: 8, durationFrames: 100, loop: false },
   // Plays the crouch-into-flex sequence once, then frameIndex's own
   // non-loop clamping holds on the final (fullest-flex) frame for however
   // much longer the post-match display runs - not looped, so it doesn't
@@ -175,7 +187,14 @@ export function drawFighter(ctx, fighter, playerNum) {
   // extra transform - a hunched sprite is just a shorter frame.
   ctx.translate(x, GROUND_Y - frameSize * CHARACTER_SCALE - jumpOffset + CHARACTER_Y_OFFSET);
   ctx.scale(CHARACTER_SCALE, CHARACTER_SCALE);
-  if (facing === -1) {
+  // Every other pose faces the way this fighter is actually facing (always
+  // toward the opponent). Knockback is the one exception - it's the fighter
+  // flying AWAY from whatever just hit them, i.e. travelling backward
+  // relative to their own facing, so the source art (which leads in one
+  // fixed direction) needs the opposite mirror rule or it reads as flying
+  // toward the attacker instead of away from them.
+  const shouldFlip = state === "knockback" ? facing === 1 : facing === -1;
+  if (shouldFlip) {
     ctx.translate(frameSize, 0);
     ctx.scale(-1, 1);
   }
@@ -193,6 +212,13 @@ export function drawFighter(ctx, fighter, playerNum) {
   if (isCrouch) {
     ctx.translate(frameSize / 2, frameSize);
     ctx.scale(CROUCH_EXTRA_SCALE, CROUCH_EXTRA_SCALE);
+    ctx.translate(-frameSize / 2, -frameSize);
+  } else if (state === "ko") {
+    // Same bottom-center pivot as crouch, scaling up instead of down - keeps
+    // the now-larger lying-down body anchored to the ground instead of
+    // growing upward/off-position.
+    ctx.translate(frameSize / 2, frameSize);
+    ctx.scale(DEATH_EXTRA_SCALE, DEATH_EXTRA_SCALE);
     ctx.translate(-frameSize / 2, -frameSize);
   }
 

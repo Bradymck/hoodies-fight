@@ -13,6 +13,28 @@ const walletStatus = document.getElementById("wallet-status");
 const openseaBtn = document.getElementById("opensea-btn");
 const characterSelect = document.getElementById("character-select");
 const characterGrid = document.getElementById("character-grid");
+const hypeEl = document.getElementById("hype");
+
+// Rotated randomly per visit so the same line doesn't go stale, and split
+// by mode - a wallet holder is about to put their actual Hoodie's name on
+// the line against the AI, which reads differently than "no wallet, just
+// picking two for free."
+const HYPE_LOCAL = [
+  "Pick two Hoodies. Beat the AI senseless.",
+  "No wallet? No problem. Grab two fighters and go.",
+  "Two Hoodies enter. One AI leaves in pieces.",
+  "Free fights, zero mercy. Choose your Hoodies.",
+];
+const HYPE_WALLET = [
+  "Your Hoodie. Your rep. The AI won't go easy.",
+  "Connect up and put your Hoodie's name on the line.",
+  "This one's on-chain. Fight like it matters.",
+  "Your NFT, your knuckles. Let's see what it's got.",
+];
+function setHype(pool) {
+  if (!hypeEl) return;
+  hypeEl.textContent = pool[Math.floor(Math.random() * pool.length)];
+}
 
 // One clear path per visitor instead of both options competing for
 // attention: a wallet means real-Hoodie-vs-AI is the whole point, so free
@@ -20,9 +42,11 @@ const characterGrid = document.getElementById("character-grid");
 // anyone who doesn't have one.
 function showWalletOnly() {
   document.getElementById("local-play").classList.add("hidden");
+  setHype(HYPE_WALLET);
 }
 function showLocalOnly() {
   document.getElementById("wallet-play").classList.add("hidden");
+  setHype(HYPE_LOCAL);
 }
 
 if (hasInjectedWallet()) {
@@ -115,7 +139,14 @@ connectWalletBtn.addEventListener("click", async () => {
 });
 
 async function renderCharacterGrid(tokenIds) {
-  characterGrid.innerHTML = "";
+  // The grid used to just sit empty while every token's art loaded in
+  // parallel - blank space with no feedback reads as broken, not loading.
+  characterGrid.innerHTML = `
+    <div class="grid-loading">
+      <div class="spinner"></div>
+      <p>Loading your fighters...</p>
+    </div>
+  `;
   characterSelect.classList.remove("hidden");
 
   const previews = await Promise.all(
@@ -128,6 +159,7 @@ async function renderCharacterGrid(tokenIds) {
     }),
   );
 
+  characterGrid.innerHTML = "";
   previews.forEach((token, i) => {
     if (!token) return;
     const id = tokenIds[i];
