@@ -12,15 +12,10 @@ const CROUCH_EXTRA_SCALE = 0.77;
 // same-sized character just knocked flat. ~78/62, matched to the standing
 // sheets' own frame size.
 const DEATH_EXTRA_SCALE = 1.3;
-const PLATFORM_TILE_COUNT = 4;
-// How far the platform texture extends above GROUND_Y - see drawArena.
-const PLATFORM_TOP_OVERSCAN = 24;
 const ARENA_BACKGROUNDS = [
   loadImg("assets/backgrounds/arena-2.png"),
   loadImg("assets/backgrounds/arena-3.png"),
 ];
-const PLATFORM_TILE = loadImg("assets/backgrounds/platform.png");
-let platformPattern = null;
 let currentArenaIndex = 0;
 
 // Called once per fight (see main.js) so the backdrop stays fixed for the
@@ -290,28 +285,6 @@ export function drawArena(ctx, w, h) {
   } else {
     ctx.fillStyle = "#1b1330";
     ctx.fillRect(0, 0, w, h);
-  }
-
-  if (PLATFORM_TILE.complete && PLATFORM_TILE.naturalWidth > 0) {
-    if (!platformPattern) platformPattern = ctx.createPattern(PLATFORM_TILE, "repeat");
-    // Extends the wood texture upward past GROUND_Y (purely visual - the
-    // actual "ground" line everything else stands/calculates on doesn't
-    // move) so ground blood decals, which can reach a bit above GROUND_Y,
-    // land on visible floor instead of spilling out over the background.
-    const platformTop = GROUND_Y - PLATFORM_TOP_OVERSCAN;
-    const platformH = h - platformTop;
-    // Non-uniform scale so exactly PLATFORM_TILE_COUNT tiles span the full
-    // width with no partial tile cut off at the edge - keeps the seams
-    // landing cleanly instead of stopping mid-tile.
-    const scaleX = w / (PLATFORM_TILE_COUNT * PLATFORM_TILE.naturalWidth);
-    const scaleY = platformH / PLATFORM_TILE.naturalHeight;
-    ctx.imageSmoothingEnabled = false;
-    ctx.save();
-    ctx.translate(0, platformTop);
-    ctx.scale(scaleX, scaleY);
-    ctx.fillStyle = platformPattern;
-    ctx.fillRect(0, 0, w / scaleX, platformH / scaleY);
-    ctx.restore();
   }
 }
 
