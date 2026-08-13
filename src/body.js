@@ -142,6 +142,10 @@ const ANIMS = {
   // durationFrames (32) over 8 sheet frames matches UPPERCUT.duration in
   // fighter.js.
   uppercut: { sheet: "uppercut", frames: 8, durationFrames: 32, loop: false },
+  // Held while charging (see fighter.js's uppercut-charge state) - frozen
+  // on the same sheet's frame 0, the wind-up's very first pose, for however
+  // long the key stays down.
+  "uppercut-charge": { sheet: "uppercut", frames: 1, durationFrames: 1, loop: false },
   // Slowed from 60 (a blink-and-you-miss-it 1s) to actually read as a
   // collapse instead of a flicker.
   ko: { sheet: "death", frames: 8, durationFrames: 100, loop: false },

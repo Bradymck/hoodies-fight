@@ -7,8 +7,22 @@ const ENGAGE_RANGE = 95; // close the gap if farther than this
 const ATTACK_RANGE = 82; // attempt an attack once this close
 const SLIDE_REACT_RANGE = 220; // slide closes distance fast, so react to it from further out than a normal swing
 const UPPERCUT_REACT_RANGE = 110; // only worth anti-airing a jump that's actually closing in
-const THINK_INTERVAL_MIN = 8; // frames between re-decisions - not every frame,
-const THINK_INTERVAL_MAX = 16; // reads as reaction time instead of an aimbot
+// Both reaction speed and every reactive/opportunistic probability below
+// scale off this - starts noticeably softer than the old fixed baseline (a
+// new player should be able to land real hits before the fight gets hard)
+// and ramps up as the AI actually takes damage, ending a bit sharper than
+// the old baseline once it's genuinely hurt. Tied to the AI's own health
+// ratio rather than elapsed time, so it's "get damage in to make it
+// harder", not just "wait it out."
+const DIFFICULTY_MIN = 0.35;
+const DIFFICULTY_MAX = 1.15;
+const THINK_INTERVAL_MIN = 10; // frames between re-decisions at difficulty 1.0
+const THINK_INTERVAL_MAX = 20; // - divided by difficulty below, so it shrinks (faster reactions) as difficulty rises
+
+function difficultyFor(self) {
+  const damageRatio = 1 - self.health / self.maxHealth;
+  return DIFFICULTY_MIN + (DIFFICULTY_MAX - DIFFICULTY_MIN) * Math.min(1, Math.max(0, damageRatio));
+}
 
 function emptyInput() {
   return {
@@ -30,7 +44,7 @@ export function createAIController(self, opponent) {
   let thinkAt = 0;
   let frame = 0;
 
-  function decide() {
+  function decide(difficulty) {
     input = emptyInput();
     const dx = opponent.x - self.x;
     const dist = Math.abs(dx);
@@ -41,7 +55,7 @@ export function createAIController(self, opponent) {
     // of the generic one below, at high odds (jumping it is close to the
     // only sane response) and across a wider window than a normal swing
     // since it closes distance instead of staying in place.
-    if (opponent.state === "slide" && dist < SLIDE_REACT_RANGE && Math.random() < 0.7) {
+    if (opponent.state === "slide" && dist < SLIDE_REACT_RANGE && Math.random() < 0.7 * difficulty) {
       input.jump = true;
       return;
     }
@@ -49,15 +63,16 @@ export function createAIController(self, opponent) {
     // punish - occasionally take the anti-air instead of just blocking/
     // waiting, so the AI actually uses the move rather than only ever
     // eating jump-ins.
-    if (opponent.state === "jump" && dist < UPPERCUT_REACT_RANGE && Math.random() < 0.35) {
+    if (opponent.state === "jump" && dist < UPPERCUT_REACT_RANGE && Math.random() < 0.35 * difficulty) {
       input.uppercut = true;
       return;
     }
 
     // React to the opponent actively attacking - duck a kick, block a punch,
-    // roughly half the time so it isn't a perfect read every single swing.
+    // roughly half the time (scaled by difficulty) so it isn't a perfect
+    // read every single swing.
     const opponentAttacking = ["punch", "kick", "special"].includes(opponent.state) && opponent.stateT < 10;
-    if (opponentAttacking && dist < ATTACK_RANGE + 20 && Math.random() < 0.5) {
+    if (opponentAttacking && dist < ATTACK_RANGE + 20 && Math.random() < 0.5 * difficulty) {
       if (opponent.state === "kick" && Math.random() < 0.6) {
         input.crouch = true;
       } else if (opponent.state !== "special") {
@@ -70,20 +85,20 @@ export function createAIController(self, opponent) {
       // Special is a thrown projectile now, not a melee move - it's just as
       // usable from across the arena as it is up close, so take the shot
       // instead of always closing distance first.
-      if (self.power >= 50 && Math.random() < 0.25) {
+      if (self.power >= 50 && Math.random() < 0.25 * difficulty) {
         input.special = true;
         return;
       }
       // Slide covers ground fast - a real alternative to walking in from a
       // distance, not just a close-range finisher.
-      if (Math.random() < 0.15) {
+      if (Math.random() < 0.15 * difficulty) {
         input.slide = true;
         return;
       }
       input[towardOpponent] = true;
       // Rarely jump in from further out instead of always walking - jump is
       // free now, no power gate needed.
-      if (dist > ENGAGE_RANGE * 2 && Math.random() < 0.15) {
+      if (dist > ENGAGE_RANGE * 2 && Math.random() < 0.15 * difficulty) {
         input.jump = true;
       }
       return;
@@ -111,11 +126,11 @@ export function createAIController(self, opponent) {
     // with the ranged special or a slide sometimes instead of always just
     // closing in on foot.
     const roll = Math.random();
-    if (self.power >= 50 && roll < 0.2) {
+    if (self.power >= 50 && roll < 0.2 * difficulty) {
       input.special = true;
       return;
     }
-    if (roll < 0.35) {
+    if (roll < 0.35 * difficulty) {
       input.slide = true;
       return;
     }
@@ -125,8 +140,11 @@ export function createAIController(self, opponent) {
   return function getInput() {
     frame++;
     if (frame >= thinkAt) {
-      decide();
-      thinkAt = frame + THINK_INTERVAL_MIN + Math.floor(Math.random() * (THINK_INTERVAL_MAX - THINK_INTERVAL_MIN));
+      const difficulty = difficultyFor(self);
+      decide(difficulty);
+      const min = THINK_INTERVAL_MIN / difficulty;
+      const max = THINK_INTERVAL_MAX / difficulty;
+      thinkAt = frame + min + Math.floor(Math.random() * (max - min));
     }
     return input;
   };

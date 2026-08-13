@@ -153,6 +153,22 @@ export class Fighter {
       this.power = Math.min(MAX_POWER, this.power + PASSIVE_REGEN_PER_FRAME);
     }
 
+    // Held to charge, released to launch - freezes on the wind-up's very
+    // first frame for as long as the key is down, so an anti-air can
+    // actually be timed against an opponent's jump instead of committing
+    // the instant the key is pressed. Resetting stateT back to 0 every
+    // frame (rather than skipping the increment above) is what keeps
+    // body.js's frame lookup pinned to frame 0 the whole time.
+    if (this.state === "uppercut-charge") {
+      if (input.uppercut) {
+        this.stateT = 0;
+        return;
+      }
+      this.setState("uppercut");
+      this.lastEvent = "uppercut-start";
+      return;
+    }
+
     // slide and uppercut both hold their pose/travel on their own timers -
     // game.js's updateSlide/checkUppercutHit own the actual x movement and
     // hit detection for them, this just counts down back to idle. knockback
@@ -232,8 +248,7 @@ export class Fighter {
       return;
     }
     if (input.uppercut) {
-      this.setState("uppercut");
-      this.lastEvent = "uppercut-start";
+      this.setState("uppercut-charge");
       return;
     }
     if (input.slide) {
