@@ -82,12 +82,13 @@ const PROJECTILE_SPRITE_TICKS_PER_FRAME = 2;
 const RAT_RUSH_SPEED = 10;
 const RAT_RUSH_HIT_RADIUS = 45;
 const RAT_RUSH_SPRITE_TICKS_PER_FRAME = 3;
-// How fast the slide closes distance - faster than the projectile since
-// it's a ground rush, not a lobbed threat. SLIDE_SPEED * SLIDE.duration
-// (fighter.js) needs to comfortably clear the ~700px arena so it can still
-// reach a target that dodged by jumping, rather than timing out short of
-// them (measured live: 11 * 34 fell 26px short of a full-width gap and just
-// stopped mid-floor with nothing to show for it).
+// How fast the slide closes distance - a short, committal burst (11 frames
+// at SLIDE.duration in fighter.js, ~175px max) meant to close one engage-
+// range gap and get under a jump, not cross the arena. It used to be tuned
+// to clear the full ~700px width, which turned it into a free full-screen
+// approach with no real risk - now whiffing one from far away just leaves
+// you exposed mid-floor instead of guaranteeing a "land behind them" payoff
+// from anywhere.
 const SLIDE_SPEED = 16;
 // Wider than PROJECTILE_HIT_RADIUS and set to just clear MIN_FIGHTER_GAP -
 // the slide should connect right as the two fighters would otherwise

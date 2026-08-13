@@ -147,7 +147,7 @@ const ANIMS = {
   // Single still frame held for the whole slide (game.js moves the fighter's
   // x directly while this state is active - see updateSlide). durationFrames
   // matches SLIDE.duration in fighter.js.
-  slide: { sheet: "slide", frames: 1, durationFrames: 44, loop: false },
+  slide: { sheet: "slide", frames: 1, durationFrames: 11, loop: false },
   // Single still frame held while knocked back from a connecting slide.
   knockback: { sheet: "knockback", frames: 1, durationFrames: 28, loop: false },
   // durationFrames (24) over the sheet's 4 frames matches UPPERCUT.duration

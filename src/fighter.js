@@ -31,11 +31,13 @@ const JUMP_HEIGHT = 140;
 // (along with UPPERCUT below) since game.js's updateSlide/checkUppercutHit
 // need the timing/range numbers directly - unlike damage, none of this
 // varies by archetype, so plain constants rather than a getter.
-// duration * SLIDE_SPEED (game.js) needs to comfortably clear the full
-// ~700px arena width, not just a typical engage distance - a slide that
-// times out short of a dodging opponent can never actually deliver the
-// "land behind them" payoff, it just stops in the middle of the floor.
-export const SLIDE = { duration: 44, damage: 12, knockback: 90 };
+// Deliberately short - this is a close-range "get under a jump" dodge/
+// punish, not a full-screen gap closer. duration * SLIDE_SPEED (game.js)
+// now covers roughly one engage-range gap (~175px), not the ~700px arena
+// the old version could cross - that was a mistake, it turned slide into a
+// free win button from anywhere on screen instead of a real close-range
+// mixup.
+export const SLIDE = { duration: 11, damage: 12, knockback: 90 };
 // How long the "hit by a slide" reaction pose holds before returning to
 // idle - see takeDamage's kind==="slide" branch.
 const KNOCKBACK_DURATION = 28;
@@ -116,6 +118,11 @@ export class Fighter {
     // Set by the caller (game.js) right after a hit/action lands, so it can
     // trigger the matching sound effect without fighter.js knowing about audio.
     this.lastEvent = null;
+    // Rising-edge tracking for every discrete action - see update()'s
+    // justPressed block. Holding a button down must not auto-repeat it the
+    // instant the previous one ends; each activation needs its own fresh
+    // press, same as a real arcade cabinet.
+    this.prevInput = { punch: false, kick: false, slide: false, special: false, jump: false };
   }
 
   get name() {
@@ -145,6 +152,27 @@ export class Fighter {
 
   update(input) {
     this.lastEvent = null;
+
+    // Computed unconditionally, before any state-gated early return below -
+    // otherwise a button held straight through an attack/hitstun/etc. would
+    // read as a "fresh press" the instant that state happens to end, which
+    // is exactly the hold-to-spam behavior this exists to prevent. uppercut
+    // is deliberately excluded - holding it is the actual charge mechanic,
+    // not something that needs edge-triggering.
+    const justPressed = {
+      punch: input.punch && !this.prevInput.punch,
+      kick: input.kick && !this.prevInput.kick,
+      slide: input.slide && !this.prevInput.slide,
+      special: input.special && !this.prevInput.special,
+      jump: input.jump && !this.prevInput.jump,
+    };
+    this.prevInput = {
+      punch: input.punch,
+      kick: input.kick,
+      slide: input.slide,
+      special: input.special,
+      jump: input.jump,
+    };
 
     if (this.state === "ko") {
       this.stateT++;
@@ -245,7 +273,7 @@ export class Fighter {
       if (this.state !== "crouch") this.setState("crouch");
       return;
     }
-    if (input.special && this.power >= SPECIAL.cost) {
+    if (justPressed.special && this.power >= SPECIAL.cost) {
       this.spendPower(SPECIAL.cost);
       // Builder/Hodler get their own dedicated melee states (see body.js's
       // specialHigh/specialLow) instead of the shared ranged-cast pose -
@@ -256,25 +284,27 @@ export class Fighter {
       this.lastEvent = "special-start";
       return;
     }
-    if (input.jump) {
+    if (justPressed.jump) {
       this.setState("jump");
       this.lastEvent = "jump-start";
       return;
     }
     if (input.uppercut) {
+      // Not edge-triggered - holding this is the actual charge mechanic
+      // (see the uppercut-charge branch above), not something to spam.
       this.setState("uppercut-charge");
       return;
     }
-    if (input.slide) {
+    if (justPressed.slide) {
       this.setState("slide");
       this.lastEvent = "slide-start";
       return;
     }
-    if (input.punch && this.state !== "punch") {
+    if (justPressed.punch) {
       this.setState("punch");
       return;
     }
-    if (input.kick && this.power >= KICK.cost) {
+    if (justPressed.kick && this.power >= KICK.cost) {
       this.spendPower(KICK.cost);
       this.setState("kick");
       return;
