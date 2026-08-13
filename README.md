@@ -11,9 +11,9 @@ Play: [hoodvshood.lol](https://hoodvshood.lol)
 - **Free play**: pick any two Hoodie token IDs and fight the AI. No wallet needed.
 - **Wallet play**: connect a wallet, and if it holds any OnChainHoodies, pick one to fight as against the AI. Ownership is read directly from-chain (Robinhood Chain, contract `0x9ec6c5...735f45`) if the OnChainHoodies API is down, so wallet play still works either way.
 - Archetype (Builder/Flipper/Hodler/Collector) drives a fighter's stats *and* their special attack:
-  - **Builder** — hits harder, and their special is a big high haymaker.
+  - **Builder** — hits harder, and their special is a big flying high kick.
   - **Flipper** — moves faster, and their special is a Hood Rat Rush (a rat swarm charging along the ground).
-  - **Hodler** — more health, and their special is a ground roundhouse that blocks incoming hits and stops an opponent's slide dead.
+  - **Hodler** — more health, and their special is a low sweep kick that blocks incoming hits and stops an opponent's slide dead.
   - **Collector** — blocks better, and their special is the long-range bolt.
   - Rare-tier traits add a small health bonus on top.
 - Punch is free and builds your power meter slowly; landing hits and successful blocks build it faster. Kick, slide, uppercut, and special all spend power or carry real risk on a whiff.

@@ -176,9 +176,9 @@ freePlayBtn.addEventListener("click", () => {
 // block multipliers) come straight from fighter.js's own ARCHETYPES so this
 // can't drift out of sync with what actually happens in a fight.
 const ARCHETYPE_INFO = {
-  Builder: { emoji: "🔨", perk: "Hits harder", special: "Special: a big high haymaker" },
+  Builder: { emoji: "🔨", perk: "Hits harder", special: "Special: a big flying high kick" },
   Flipper: { emoji: "⚡", perk: "Moves faster", special: "Special: Hood Rat Rush - a rat swarm along the ground" },
-  Hodler: { emoji: "💎", perk: "More health", special: "Special: a ground roundhouse that blocks hits and stops slides cold" },
+  Hodler: { emoji: "💎", perk: "More health", special: "Special: a low sweep kick that blocks hits and stops slides cold" },
   Collector: { emoji: "🛡️", perk: "Blocks better", special: "Special: the long-range bolt" },
 };
 
