@@ -29,6 +29,19 @@ python3 -m http.server 8420
 
 Then open `http://localhost:8420`.
 
+## Verifying the live site
+
+This matters most if you're deciding whether to connect a wallet: [hoodvshood.lol](https://hoodvshood.lol) never writes to your wallet or requests a signature for anything beyond reading your address, but you shouldn't have to take that on faith.
+
+- **Quick check**: every page load shows a footer at the bottom - "Running commit `<sha>`" - linking straight to that exact commit on GitHub. Click through and read the real source, particularly `src/wallet.js` (all it does is `eth_requestAccounts` and a chain switch) and `src/chain.js`/`src/api.js` (read-only lookups, no writes).
+- **Byte-for-byte check**: this is a zero-build static site - the deployed JS *is* the source JS, nothing is bundled or transformed. Pick any file and diff it against the commit shown in the footer:
+
+  ```bash
+  curl -s https://hoodvshood.lol/src/wallet.js -o live.js
+  curl -s https://raw.githubusercontent.com/Pixelpushin/hoodies-fight/<commit-sha>/src/wallet.js -o repo.js
+  diff live.js repo.js  # no output = identical
+  ```
+
 ## Project layout
 
 ```text

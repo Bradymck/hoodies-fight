@@ -447,3 +447,19 @@ canvas {
   opacity: 0.7;
   margin-top: 10px;
 }
+
+#build-footer {
+  font-size: 11px;
+  opacity: 0.45;
+  margin: 24px 0 8px;
+  letter-spacing: 0.03em;
+}
+
+#build-footer a {
+  color: #3ddc3d;
+  text-decoration: underline;
+}
+
+#build-footer:empty {
+  display: none;
+}

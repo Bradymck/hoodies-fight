@@ -344,3 +344,25 @@ async function runCountdown(tauntsSpoken) {
   await new Promise((resolve) => setTimeout(resolve, 650));
   el.classList.add("hidden");
 }
+
+// version.json is stamped at deploy time by scripts/stamp-version.sh
+// (Vercel's buildCommand, see vercel.json) with the exact commit Vercel is
+// serving - lets a visitor click straight through to the real source
+// instead of taking "it's open source" on faith. 404s on local dev (no
+// Vercel build ran) - that's expected, so the footer just stays empty
+// rather than showing a broken or fake link.
+async function showBuildFooter() {
+  const el = document.getElementById("build-footer");
+  if (!el) return;
+  try {
+    const res = await fetch("version.json", { cache: "no-store" });
+    if (!res.ok) return;
+    const { commit, repo } = await res.json();
+    if (!commit || !repo) return;
+    const short = commit.slice(0, 7);
+    el.innerHTML = `Running <a href="https://github.com/${repo}/commit/${commit}" target="_blank" rel="noopener noreferrer">commit ${short}</a> - verify this matches <a href="https://github.com/${repo}" target="_blank" rel="noopener noreferrer">the source on GitHub</a>`;
+  } catch {
+    // No network, or not a Vercel deploy - leave the footer empty.
+  }
+}
+showBuildFooter();
