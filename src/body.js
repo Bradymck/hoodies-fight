@@ -330,10 +330,17 @@ export function drawFighter(ctx, fighter, playerNum) {
 
     ctx.imageSmoothingEnabled = false;
     if (rotationDeg) {
+      // Pivoting around anchor itself (the drawn square's center) swings the
+      // neck end of the head away from the body as it rotates - a real head
+      // tips from the neck, not its own middle. Anchor is calibrated as the
+      // center of the unrotated square (see the plain drawImage below), so
+      // its neck/bottom edge sits HEAD_SIZE/2 further down - pivot there
+      // instead, so that point stays fixed against the collar while the
+      // head tips.
       ctx.save();
-      ctx.translate(anchor.x, anchor.y);
+      ctx.translate(anchor.x, anchor.y + HEAD_SIZE / 2);
       ctx.rotate((rotationDeg * Math.PI) / 180);
-      ctx.drawImage(headImg, -HEAD_SIZE / 2, -HEAD_SIZE / 2, HEAD_SIZE, HEAD_SIZE);
+      ctx.drawImage(headImg, -HEAD_SIZE / 2, -HEAD_SIZE, HEAD_SIZE, HEAD_SIZE);
       ctx.restore();
     } else {
       ctx.drawImage(
