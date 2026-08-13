@@ -33,12 +33,17 @@ function showToast(unlocked) {
   toastTimer = setTimeout(() => el.classList.add("hidden"), 2200);
 }
 
-// Call once at startup - listens globally (not tied to the setup screen or
-// an active match) so it can be entered any time, same as the arcade
-// originals this is riffing on.
+// Call once at startup. Only armed while the setup screen (character
+// pick, pre-match) is actually showing - not during a live match, where
+// arrow keys/B/A are real P2 controls and could false-trigger it mid-fight.
 export function initBloodCode() {
   let progress = 0;
   window.addEventListener("keydown", (e) => {
+    const setupEl = document.getElementById("setup");
+    if (!setupEl || setupEl.classList.contains("hidden")) {
+      progress = 0;
+      return;
+    }
     const expected = SEQUENCE[progress];
     if (e.code === expected) {
       progress++;
