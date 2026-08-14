@@ -361,6 +361,9 @@ h1 {
   inset: 0;
   overflow: hidden;
   z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Oversized + inset-negative rather than blurred at its own edges - a
@@ -378,30 +381,35 @@ h1 {
   z-index: -1;
 }
 
-/* Everything sized off dvh (viewport height, accounting for mobile browser
-   chrome - vh as a fallback for browsers without dvh support yet) rather
-   than vw/px caps, and the whole screen is overflow:hidden - this has to
-   fit in one viewport-height on ANY screen, never scroll, so every piece
-   below scales down together on a short/laptop-height window instead of
-   overflowing. */
+/* Sized naturally (comfortably roomy - not squeezed to an assumed
+   viewport), then measured and scaled down as a whole by fitSelectScreen()
+   in main.js if it doesn't actually fit the visitor's screen. A vh-only
+   budget can't account for variable content height (e.g. a long trait name
+   wrapping the fighter-label to two lines), and overflow:hidden alone just
+   silently clips instead of shrinking - measuring the real rendered size
+   and scaling is the only way to guarantee nothing is ever cut off,
+   regardless of screen size. transform-origin stays centered so the scale
+   shrinks in place around the same point #select-screen already centered
+   it at. */
 #select-content {
   position: relative;
-  height: 100vh;
-  height: 100dvh;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1.5vh;
-  padding: 1.5vh 16px 2vh;
+  gap: 22px;
+  padding: 22px 16px;
+  width: 100%;
+  max-width: 1150px;
+  transform-origin: 50% 50%;
 }
 
 #select-fighters {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4vw;
+  gap: 40px;
   width: 100%;
   max-width: 1100px;
   flex: 0 1 auto;
@@ -425,12 +433,12 @@ h1 {
    window instead. overflow:hidden is load-bearing (it's what does the
    actual cropping), but no visible border/box/background - the character
    is meant to read as standing directly in the blurred scene, MK-style,
-   not sitting inside a UI card. Sized off height (dvh) with a fixed aspect
-   ratio, not an independent width/height cap - so it actually shrinks on a
-   short viewport instead of one dimension quietly overflowing the other. */
+   not sitting inside a UI card. Sized off a fixed width with a fixed
+   aspect ratio (comfortably big - see the #select-content comment above
+   for why an assumed vh budget isn't what keeps this from overflowing
+   anymore). */
 .portrait-frame {
-  height: 40vh;
-  height: 40dvh;
+  width: min(320px, 34vw);
   aspect-ratio: 3 / 4;
   overflow: hidden;
 }
@@ -455,7 +463,7 @@ h1 {
 .fighter-label {
   margin-top: 10px;
   font-family: "Bungee", "Courier New", monospace;
-  font-size: clamp(12px, 1.6vw, 16px);
+  font-size: 15px;
   letter-spacing: 0.08em;
   color: #ffe066;
   text-shadow: 0 0 8px #ffe06699;
@@ -466,7 +474,7 @@ h1 {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.2vh;
+  gap: 14px;
   flex-shrink: 0;
   /* #select-fighters centers this column against the portraits'
      full height (align-items: center) - no manual offset needed. */
@@ -474,7 +482,7 @@ h1 {
 
 #vs-mark {
   font-family: "Bungee", "Courier New", monospace;
-  font-size: clamp(20px, 3vw, 34px);
+  font-size: 30px;
   color: #ff4444;
   text-shadow: 0 0 12px #ff4444aa, 0 0 30px #ff444455;
 }
@@ -498,19 +506,14 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 26vh;
-  max-height: 26dvh;
+  max-height: 260px;
   overflow: hidden;
   box-sizing: border-box;
 }
 
-/* Column width (and so row height, since each card is roughly square) caps
-   off vh too via the minmax floor - on a short viewport this shrinks the
-   thumbnails instead of the grid quietly growing past its parent's
-   max-height. */
 .panel-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(70px, 9vh), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
   gap: 6px;
   overflow: hidden;
 }

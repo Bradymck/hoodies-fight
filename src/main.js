@@ -121,12 +121,42 @@ const MAX_TOKEN_ID = 5999;
 const ARENA_BG_IMAGES = ["assets/backgrounds/arena-2.png", "assets/backgrounds/arena-3.png"];
 
 const selectScreen = document.getElementById("select-screen");
+const selectContent = document.getElementById("select-content");
 const p1Grid = document.getElementById("p1-grid");
 const p2Grid = document.getElementById("p2-grid");
 const p1Pagination = document.getElementById("p1-pagination");
 const p2Pagination = document.getElementById("p2-pagination");
 const p1Label = document.getElementById("p1-select-label");
 const p2Label = document.getElementById("p2-select-label");
+
+// #select-content is sized naturally (comfortably roomy), then measured
+// against the real screen and scaled down if it doesn't actually fit - a
+// vh-only budget can't account for variable content height (e.g. a long
+// trait name wrapping a fighter-label to two lines), and overflow:hidden
+// alone just silently clips instead of shrinking. Measuring the real
+// rendered size and scaling the whole block is the only way to guarantee
+// nothing (a portrait, a panel, pagination controls) is ever cut off, no
+// matter the screen size.
+function fitSelectScreen() {
+  if (selectScreen.classList.contains("hidden")) return;
+  selectContent.style.transform = "none";
+  const naturalW = selectContent.scrollWidth;
+  const naturalH = selectContent.scrollHeight;
+  const availW = selectScreen.clientWidth;
+  const availH = selectScreen.clientHeight;
+  const scale = Math.min(1, availW / naturalW, availH / naturalH);
+  selectContent.style.transform = scale < 1 ? `scale(${scale})` : "none";
+}
+window.addEventListener("resize", fitSelectScreen);
+// Belt-and-suspenders over the explicit fitSelectScreen() calls below: this
+// catches ANY change to the content's natural (pre-transform) size - a
+// webfont finishing loading after first paint, a label wrapping
+// differently, anything - not just the specific moments (screen open, pick
+// a fighter) already covered. transform doesn't affect layout box size, so
+// this never re-fires from fitSelectScreen's own scale write.
+if (typeof ResizeObserver !== "undefined") {
+  new ResizeObserver(() => fitSelectScreen()).observe(selectContent);
+}
 
 function randomTokenPool(count) {
   const pool = new Set();
@@ -271,6 +301,7 @@ async function selectFighter(side, tokenId, token) {
   const label = side === "p1" ? p1Label : p2Label;
   const type = token.traits?.hoodie ?? "Builder";
   label.textContent = `${token.token?.name ?? `#${tokenId}`} - ${type}`;
+  fitSelectScreen();
 
   try {
     const data = await loadFighterData(tokenId);
@@ -279,6 +310,7 @@ async function selectFighter(side, tokenId, token) {
     updateReadyState();
   } catch {
     label.textContent = "Couldn't load that Hoodie - try another.";
+    fitSelectScreen();
   }
 }
 
@@ -376,6 +408,7 @@ async function enterSelectScreen(walletTokenIds) {
   // visitor had just clicked the first card themselves.
   p1Grid.querySelector(".character-card")?.click();
   p2Grid.querySelector(".character-card")?.click();
+  fitSelectScreen();
 }
 
 readyBtn.addEventListener("click", async () => {
