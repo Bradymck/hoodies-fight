@@ -388,13 +388,13 @@ h1 {
   aspect-ratio: auto;
   width: 100%;
   height: auto;
-  transform: scale(3.6) translate(0, 6%);
+  transform: scale(3.9) translate(0, 9%);
   transform-origin: 50% 62%;
   image-rendering: pixelated;
 }
 
 #p2-display .portrait-frame canvas {
-  transform: scale(3.6) translate(0, 6%) scaleX(-1);
+  transform: scale(3.9) translate(0, 9%) scaleX(-1);
 }
 
 .fighter-label {
