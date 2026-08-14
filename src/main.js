@@ -356,7 +356,7 @@ function renderPagination(side) {
 // the connected wallet's real Hoodies for P1 (P2 is still always a random
 // sample - see the top-of-section comment on why this stays two symmetric
 // pools instead of one shared list).
-function enterSelectScreen(walletTokenIds) {
+async function enterSelectScreen(walletTokenIds) {
   document.getElementById("setup").classList.add("hidden");
   document.querySelector("h1").classList.add("hidden");
   selectScreen.classList.remove("hidden");
@@ -370,8 +370,12 @@ function enterSelectScreen(walletTokenIds) {
   p1Label.textContent = "CHOOSE YOUR FIGHTER";
   p2Label.textContent = "CHOOSE YOUR OPPONENT";
   updateReadyState();
-  renderPanel("p1");
-  renderPanel("p2");
+  await Promise.all([renderPanel("p1"), renderPanel("p2")]);
+  // Never open on two blank portraits - auto-pick the top-left fighter in
+  // each pool so both sides show something immediately, same as if the
+  // visitor had just clicked the first card themselves.
+  p1Grid.querySelector(".character-card")?.click();
+  p2Grid.querySelector(".character-card")?.click();
 }
 
 readyBtn.addEventListener("click", async () => {

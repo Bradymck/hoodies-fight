@@ -359,7 +359,7 @@ h1 {
 #select-screen {
   position: fixed;
   inset: 0;
-  overflow-y: auto;
+  overflow: hidden;
   z-index: 5;
 }
 
@@ -378,14 +378,23 @@ h1 {
   z-index: -1;
 }
 
+/* Everything sized off dvh (viewport height, accounting for mobile browser
+   chrome - vh as a fallback for browsers without dvh support yet) rather
+   than vw/px caps, and the whole screen is overflow:hidden - this has to
+   fit in one viewport-height on ANY screen, never scroll, so every piece
+   below scales down together on a short/laptop-height window instead of
+   overflowing. */
 #select-content {
   position: relative;
-  min-height: 100%;
+  height: 100vh;
+  height: 100dvh;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
-  padding: 24px 16px 40px;
+  justify-content: center;
+  gap: 1.5vh;
+  padding: 1.5vh 16px 2vh;
 }
 
 #select-fighters {
@@ -395,6 +404,8 @@ h1 {
   gap: 4vw;
   width: 100%;
   max-width: 1100px;
+  flex: 0 1 auto;
+  min-height: 0;
 }
 
 .fighter-display {
@@ -403,6 +414,7 @@ h1 {
   align-items: center;
   flex: 1;
   min-width: 0;
+  min-height: 0;
 }
 
 /* Fixed-size window that crops the wide 800x360 arena-shaped canvas down
@@ -413,10 +425,13 @@ h1 {
    window instead. overflow:hidden is load-bearing (it's what does the
    actual cropping), but no visible border/box/background - the character
    is meant to read as standing directly in the blurred scene, MK-style,
-   not sitting inside a UI card. */
+   not sitting inside a UI card. Sized off height (dvh) with a fixed aspect
+   ratio, not an independent width/height cap - so it actually shrinks on a
+   short viewport instead of one dimension quietly overflowing the other. */
 .portrait-frame {
-  width: min(46vw, 420px);
-  height: min(64vw, 560px);
+  height: 40vh;
+  height: 40dvh;
+  aspect-ratio: 3 / 4;
   overflow: hidden;
 }
 
@@ -455,9 +470,10 @@ h1 {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 1.2vh;
   flex-shrink: 0;
-  padding-top: 30vh;
+  /* #select-fighters centers this column against the portraits'
+     full height (align-items: center) - no manual offset needed. */
 }
 
 #vs-mark {
@@ -472,6 +488,8 @@ h1 {
   gap: 16px;
   width: 100%;
   max-width: 1100px;
+  flex: 0 1 auto;
+  min-height: 0;
 }
 
 .select-panel {
@@ -480,17 +498,25 @@ h1 {
   background: #0b0b0fcc;
   border: 2px solid #3ddc3d33;
   border-radius: 6px;
-  padding: 10px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  max-height: 26vh;
+  max-height: 26dvh;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
+/* Column width (and so row height, since each card is roughly square) caps
+   off vh too via the minmax floor - on a short viewport this shrinks the
+   thumbnails instead of the grid quietly growing past its parent's
+   max-height. */
 .panel-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
-  gap: 8px;
-  min-height: 160px;
+  grid-template-columns: repeat(auto-fill, minmax(min(70px, 9vh), 1fr));
+  gap: 6px;
+  overflow: hidden;
 }
 
 .panel-pagination {
