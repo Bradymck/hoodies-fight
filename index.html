@@ -22,21 +22,23 @@
       <source src="assets/backgrounds/setup-bg.mp4" type="video/mp4" />
     </video>
     <div id="setup-content">
-      <p class="hype" id="hype">Pick two Hoodies. Beat the AI senseless.</p>
-      <div id="local-play">
-        <button id="start-btn">ENTER THE ARENA</button>
-        <p id="integrity-check"></p>
-      </div>
+      <p class="hype" id="hype">Choose how you want to play:</p>
+      <div id="play-options">
+        <div class="play-option" id="local-play">
+          <button id="start-btn">PLAY FREE</button>
+          <p class="option-desc">No wallet needed. Pick two fighters and play now.</p>
+          <p id="integrity-check"></p>
+        </div>
 
-      <p id="setup-divider" class="hidden">&mdash; or &mdash;</p>
-
-      <div id="wallet-play">
-        <button id="connect-wallet-btn">CONNECT WALLET &amp; THROW HANDS AS YOUR HOODIE</button>
-        <p id="wallet-status"></p>
-        <a id="opensea-btn" class="hidden" href="https://opensea.io/collection/onchainhoodies-" target="_blank" rel="noopener noreferrer">
-          GET A HOODIE ON OPENSEA
-        </a>
-        <button id="free-play-btn" class="hidden">JUST LET ME FIGHT (FREE, NO NFT NEEDED)</button>
+        <div class="play-option" id="wallet-play">
+          <button id="connect-wallet-btn">CONNECT WALLET</button>
+          <p class="option-desc">Use your own Hoodie NFT to fight.</p>
+          <p id="wallet-status"></p>
+          <a id="opensea-btn" class="hidden" href="https://opensea.io/collection/onchainhoodies-" target="_blank" rel="noopener noreferrer">
+            GET A HOODIE ON OPENSEA
+          </a>
+          <button id="free-play-btn" class="hidden">PLAY FREE INSTEAD</button>
+        </div>
       </div>
     </div>
   </div>

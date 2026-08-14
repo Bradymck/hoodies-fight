@@ -4,7 +4,7 @@ import { createGame } from "./game.js";
 import { initSound, playSound, playRandomTrack, stopMusic } from "./sound.js";
 import { pickRandomArena, drawArena, drawFighter } from "./body.js";
 import { speakTaunt } from "./tts.js";
-import { connectWallet, hasInjectedWallet, getConnectedAccount, disconnectWallet } from "./wallet.js";
+import { connectWallet, getConnectedAccount, disconnectWallet } from "./wallet.js";
 import { initBloodCode } from "./blood-code.js";
 
 initBloodCode();
@@ -32,7 +32,6 @@ const hypeEl = document.getElementById("hype");
 const practiceToggle = document.getElementById("practice-toggle");
 const readyBtn = document.getElementById("ready-btn");
 const exitPracticeBtn = document.getElementById("exit-practice-btn");
-const setupDivider = document.getElementById("setup-divider");
 const walletChip = document.getElementById("wallet-chip");
 const walletChipAddress = document.getElementById("wallet-chip-address");
 const disconnectBtn = document.getElementById("disconnect-btn");
@@ -69,66 +68,28 @@ exitPracticeBtn.addEventListener("click", () => {
   location.reload();
 });
 
-// Rotated randomly per visit so the same line doesn't go stale, and split
-// by mode - a wallet holder is about to put their actual Hoodie's name on
-// the line against the AI, which reads differently than "no wallet, just
-// picking two for free."
-const HYPE_LOCAL = [
-  "Pick two Hoodies. Beat the AI senseless.",
-  "No wallet? No problem. Grab two fighters and go.",
+// Rotated randomly per visit so the same line doesn't go stale. Both play
+// options are always shown side by side now (see index.html's #play-options)
+// instead of picking one to hide based on whether a wallet extension merely
+// exists, so this no longer needs to be split by mode - one clear line
+// setting up the two cards below is enough.
+const HYPE_LINES = [
+  "Choose how you want to play:",
   "Two Hoodies enter. One AI leaves in pieces.",
-  "Free fights, zero mercy. Choose your Hoodies.",
+  "Free to play, or bring your own Hoodie.",
 ];
-const HYPE_WALLET = [
-  "Your Hoodie. Your rep. The AI won't go easy.",
-  "Connect up and put your Hoodie's name on the line.",
-  "This one's on-chain. Fight like it matters.",
-  "Your NFT, your knuckles. Let's see what it's got.",
-];
-function setHype(pool) {
+function setHype() {
   if (!hypeEl) return;
-  hypeEl.textContent = pool[Math.floor(Math.random() * pool.length)];
+  hypeEl.textContent = HYPE_LINES[Math.floor(Math.random() * HYPE_LINES.length)];
 }
+setHype();
 
-// A wallet extension being installed doesn't mean this visitor wants to
-// connect it here (or owns a Hoodie at all) - hiding free play whenever one
-// was merely detected forced everyone down the wallet path with no way
-// back. Wallet-connect is still the featured option (it's the whole point
-// for anyone who does have a Hoodie), free play just stays reachable too,
-// with a divider so it doesn't read as two competing primary CTAs.
-function showWalletPrimary() {
-  setupDivider.classList.remove("hidden");
-  setHype(HYPE_WALLET);
-}
-function showLocalOnly() {
-  document.getElementById("wallet-play").classList.add("hidden");
-  setHype(HYPE_LOCAL);
-}
-
-if (hasInjectedWallet()) {
-  showWalletPrimary();
-  tryResumeWalletSession();
-} else {
-  // Some wallet extensions inject window.ethereum asynchronously, slightly
-  // after this script runs - a single synchronous check at load time can
-  // race and wrongly decide "no wallet" for someone who actually has one.
-  // Give it a brief grace window via the event most wallets fire, with a
-  // timeout fallback so a visitor with no wallet at all isn't left staring
-  // at a decision that never resolves.
-  let decided = false;
-  const onInit = () => {
-    if (decided) return;
-    decided = true;
-    if (hasInjectedWallet()) {
-      showWalletPrimary();
-      tryResumeWalletSession();
-    } else {
-      showLocalOnly();
-    }
-  };
-  window.addEventListener("ethereum#initialized", onInit, { once: true });
-  setTimeout(onInit, 300);
-}
+// Silently resumes an already-authorized wallet session if one exists -
+// safe to call even with no wallet extension at all (getConnectedAccount
+// just returns null). Both play-option cards stay visible regardless of
+// whether this finds anything; a returning wallet visitor just gets
+// dropped straight into the select screen a moment later, same as before.
+tryResumeWalletSession();
 
 // ===== Character select screen =====
 //

@@ -134,11 +134,49 @@ h1 {
   min-height: 1.2em;
 }
 
-#setup-divider {
-  color: #6a6a76;
+#play-options {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 40px;
+  margin-top: 8px;
+}
+
+.play-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  max-width: 320px;
+}
+
+/* A thin divider, not a filled card/box - keeps the two options visually
+   separate without covering the background video behind them. */
+.play-option + .play-option {
+  border-left: 1px solid #3ddc3d33;
+  padding-left: 40px;
+}
+
+.option-desc {
+  margin: 10px 0 0;
   font-size: 13px;
-  letter-spacing: 0.05em;
-  margin: 22px 0;
+  line-height: 1.4;
+  color: #b8b8c2;
+}
+
+@media (max-width: 640px) {
+  #play-options {
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+  }
+  .play-option + .play-option {
+    border-left: none;
+    border-top: 1px solid #3ddc3d33;
+    padding-left: 0;
+    padding-top: 24px;
+  }
 }
 
 /* Fixed corner chip, not scoped inside #setup - proceedWithWallet moves on
