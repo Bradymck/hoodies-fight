@@ -986,15 +986,91 @@ canvas {
   box-shadow: 0 0 12px #3ddc3d44;
 }
 
-.controls {
-  font-size: 14px;
-  line-height: 1.6;
-  color: #b8b8c2;
-  text-align: left;
-  margin: 0 0 14px;
+.panel-heading {
+  margin: 0 0 10px;
+  font-family: "Bungee", "Courier New", monospace;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: #3ddc3d;
+  text-shadow: 0 0 6px #3ddc3d55;
 }
 
-.controls:last-child {
+#controls-panel h3.panel-heading:not(:first-child) {
+  margin-top: 22px;
+}
+
+.key-list {
+  list-style: none;
+  margin: 0 0 4px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.key-caps {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.key-cap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  background: #16161d;
+  border: 1px solid #3ddc3d88;
+  border-bottom: 2px solid #3ddc3d;
+  border-radius: 5px;
+  box-shadow: 0 0 6px #3ddc3d33, inset 0 1px 0 #ffffff14;
+  font-family: "Bungee", "Courier New", monospace;
+  font-size: 12px;
+  color: #3ddc3d;
+  text-shadow: 0 0 6px #3ddc3d66;
+}
+
+.key-cap-wide {
+  min-width: 62px;
+  padding: 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.key-label {
+  font-size: 13px;
+  color: #d0d0d8;
+  letter-spacing: 0.02em;
+}
+
+.tips-list {
+  margin: 0;
+  padding: 0 0 0 18px;
+  list-style: disc;
+}
+
+.tips-list li {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #b8b8c2;
+  margin: 0 0 10px;
+}
+
+.tips-list li::marker {
+  color: #ffe066;
+}
+
+.tips-list li:last-child {
   margin-bottom: 0;
 }
 
