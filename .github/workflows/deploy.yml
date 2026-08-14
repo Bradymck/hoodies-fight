@@ -46,6 +46,14 @@ jobs:
         run: vercel build --prod --token="$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          # actions/checkout leaves the runner in a detached HEAD, which
+          # breaks Vercel CLI's own local-git auto-detection for these two
+          # (that auto-detection is what made this "just work" during local
+          # `vercel --prod` deploys all along - CI has no branch ref to read
+          # it from). Setting them explicitly from GitHub's own context
+          # instead of relying on Vercel to guess.
+          VERCEL_GIT_COMMIT_SHA: ${{ github.sha }}
+          VERCEL_GIT_COMMIT_REF: ${{ github.ref_name }}
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
