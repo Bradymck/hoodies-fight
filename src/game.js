@@ -426,11 +426,15 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
 
   // Anti-air counter - deliberately does NOT exclude a jumping defender
   // (every other melee check does) since catching one mid-jump is the whole
-  // point. On hit, the defender gets knocked back the way they came - since
-  // takeDamage forces them out of "jump" into "hitstun", and resolveCollision
-  // only skips enforcement while a fighter is actually airborne, this knockback
-  // is what actually prevents them landing past the attacker instead of just
-  // interrupting the jump in place.
+  // point. The knockback push, though, is ONLY for that anti-air case -
+  // stopping someone jumping over you from landing past you. A grounded
+  // defender caught by an uppercut gets normal damage and the normal
+  // hitstun reaction (takeDamage already only sets "knockback" pose for a
+  // slide, never for this), but used to ALSO get instantly shoved 100px
+  // sideways regardless, since this push happened unconditionally - which
+  // read as a real knockback hit even standing right in front of them.
+  // "Was jumping" has to be captured before takeDamage runs, since that
+  // call itself changes defender.state out of "jump".
   function checkUppercutHit(attacker, defender) {
     if (attacker.state !== "uppercut") return;
     if (attacker.stateT < UPPERCUT.activeStart || attacker.stateT > UPPERCUT.activeEnd) return;
@@ -439,11 +443,14 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
     if (Math.abs(attackerCenterX - defenderCenterX) >= UPPERCUT.range) return;
 
+    const caughtMidair = defender.state === "jump";
     attacker.hasHit = true;
     defender.takeDamage(attacker.uppercutDamage, attacker.x, "uppercut");
     attacker.onLandedHit("uppercut");
-    const pushDir = defenderCenterX >= attackerCenterX ? 1 : -1;
-    defender.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, defender.x + pushDir * UPPERCUT.knockback));
+    if (caughtMidair) {
+      const pushDir = defenderCenterX >= attackerCenterX ? 1 : -1;
+      defender.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, defender.x + pushDir * UPPERCUT.knockback));
+    }
     attacker.lastEvent = "uppercut-hit";
     shake = Math.max(shake, SHAKE_ON_HIT);
     flash = Math.max(flash, FLASH_ON_HIT);
