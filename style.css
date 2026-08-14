@@ -362,30 +362,39 @@ h1 {
 }
 
 /* Fixed-size window that crops the wide 800x360 arena-shaped canvas down
-   to a tall MK-style bust portrait - simpler than teaching drawFighter a
-   second coordinate system just for this screen, since the canvas already
-   renders the exact same idle-loop fighter the pre-fight/in-match screens
-   do. The canvas is scaled+shifted via CSS transform inside this
-   overflow:hidden window instead. */
+   to a tall MK-style portrait - simpler than teaching drawFighter a second
+   coordinate system just for this screen, since the canvas already renders
+   the exact same idle-loop fighter the pre-fight/in-match screens do. The
+   canvas is scaled+shifted via CSS transform inside this overflow:hidden
+   window instead. overflow:hidden is load-bearing (it's what does the
+   actual cropping), but no visible border/box/background - the character
+   is meant to read as standing directly in the blurred scene, MK-style,
+   not sitting inside a UI card. */
 .portrait-frame {
-  width: min(38vw, 320px);
-  height: min(48vw, 400px);
+  width: min(46vw, 420px);
+  height: min(64vw, 560px);
   overflow: hidden;
-  border-radius: 6px;
-  box-shadow: 0 0 0 2px #3ddc3d55, 0 0 30px #000a;
-  background: radial-gradient(ellipse at 50% 70%, #1b133066, transparent 70%);
 }
 
+/* Overrides the global `canvas { background/border/box-shadow/aspect-ratio }`
+   rule (meant for the real match canvas) - without this, every portrait
+   canvas picked that styling up too, showing as a solid framed box behind
+   the character instead of a transparent cutout over the blurred scene. */
 .portrait-frame canvas {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  max-width: none;
+  aspect-ratio: auto;
   width: 100%;
   height: auto;
-  transform: scale(2.6) translate(0, 6%);
+  transform: scale(3.6) translate(0, 6%);
   transform-origin: 50% 62%;
   image-rendering: pixelated;
 }
 
 #p2-display .portrait-frame canvas {
-  transform: scale(2.6) translate(0, 6%) scaleX(-1);
+  transform: scale(3.6) translate(0, 6%) scaleX(-1);
 }
 
 .fighter-label {

@@ -234,7 +234,17 @@ function createPortraitRenderer(canvasId, playerNum, facing) {
   raf = requestAnimationFrame(loop);
 
   return {
-    setHead(headImg) {
+    setHead(imageUrl) {
+      // drawFighter checks headImg.complete before drawing it - a real
+      // Fighter builds this same Image-from-data-URL itself (see fighter.js
+      // constructor), but this visual is a plain object standing in for one,
+      // so it needs to do that conversion itself. Passing the raw data-URL
+      // string straight through (what this did before) meant
+      // `headImg.complete` was always undefined - the head silently never
+      // drew, body only.
+      const headImg = new Image();
+      headImg.crossOrigin = "anonymous";
+      headImg.src = imageUrl;
       visual = { x: 347, facing, state: "idle", stateT: 0, headImg, jumpOffset: 0 };
     },
     stop() {
