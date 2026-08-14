@@ -4,7 +4,7 @@ import { createGame } from "./game.js";
 import { initSound, playSound, playRandomTrack, stopMusic } from "./sound.js";
 import { pickRandomArena, drawArena, drawFighter } from "./body.js";
 import { speakTaunt } from "./tts.js";
-import { connectWallet, hasInjectedWallet, getConnectedAccount } from "./wallet.js";
+import { connectWallet, hasInjectedWallet, getConnectedAccount, disconnectWallet } from "./wallet.js";
 import { initBloodCode } from "./blood-code.js";
 
 initBloodCode();
@@ -32,6 +32,33 @@ const hypeEl = document.getElementById("hype");
 const practiceToggle = document.getElementById("practice-toggle");
 const readyBtn = document.getElementById("ready-btn");
 const exitPracticeBtn = document.getElementById("exit-practice-btn");
+const setupDivider = document.getElementById("setup-divider");
+const walletChip = document.getElementById("wallet-chip");
+const walletChipAddress = document.getElementById("wallet-chip-address");
+const disconnectBtn = document.getElementById("disconnect-btn");
+
+function shortAddress(address) {
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+// Persists across the setup/select-screen/arena transition (fixed
+// position, lives outside all three) since it's the only place a connected
+// visitor can find Disconnect at all - proceedWithWallet moves on to the
+// select screen almost immediately, so this can't just live on the setup
+// screen and disappear with it.
+function showWalletChip(address) {
+  walletChipAddress.textContent = shortAddress(address);
+  walletChip.classList.remove("hidden");
+}
+
+disconnectBtn.addEventListener("click", async () => {
+  disconnectBtn.disabled = true;
+  await disconnectWallet();
+  // Simplest full reset back to the setup screen's initial state - same
+  // "give up on hand-resetting every bit of state" call runMatch/
+  // exitPracticeBtn already make elsewhere in this file.
+  location.reload();
+});
 
 // Reload is the same "give up on trying to hand-reset every bit of setup
 // state" call as the normal Back to Menu button (see runMatch/
@@ -63,12 +90,14 @@ function setHype(pool) {
   hypeEl.textContent = pool[Math.floor(Math.random() * pool.length)];
 }
 
-// One clear path per visitor instead of both options competing for
-// attention: a wallet means real-Hoodie-vs-AI is the whole point, so free
-// local play (and all the wallet/crypto UI) just gets out of the way for
-// anyone who doesn't have one.
-function showWalletOnly() {
-  document.getElementById("local-play").classList.add("hidden");
+// A wallet extension being installed doesn't mean this visitor wants to
+// connect it here (or owns a Hoodie at all) - hiding free play whenever one
+// was merely detected forced everyone down the wallet path with no way
+// back. Wallet-connect is still the featured option (it's the whole point
+// for anyone who does have a Hoodie), free play just stays reachable too,
+// with a divider so it doesn't read as two competing primary CTAs.
+function showWalletPrimary() {
+  setupDivider.classList.remove("hidden");
   setHype(HYPE_WALLET);
 }
 function showLocalOnly() {
@@ -77,7 +106,7 @@ function showLocalOnly() {
 }
 
 if (hasInjectedWallet()) {
-  showWalletOnly();
+  showWalletPrimary();
   tryResumeWalletSession();
 } else {
   // Some wallet extensions inject window.ethereum asynchronously, slightly
@@ -91,7 +120,7 @@ if (hasInjectedWallet()) {
     if (decided) return;
     decided = true;
     if (hasInjectedWallet()) {
-      showWalletOnly();
+      showWalletPrimary();
       tryResumeWalletSession();
     } else {
       showLocalOnly();
@@ -462,6 +491,7 @@ startBtn.addEventListener("click", () => {
 // click sound both need one and the resume path doesn't have one to spend.
 async function proceedWithWallet(address, { unlockSound }) {
   walletStatus.textContent = "Scanning the chain for your Hoodies...";
+  showWalletChip(address);
   const soundReady = unlockSound ? initSound() : Promise.resolve();
 
   try {
@@ -520,9 +550,9 @@ async function tryResumeWalletSession() {
 }
 
 // Drops a wallet-connected-but-no-Hoodie visitor straight into the same
-// free select-screen flow a no-wallet visitor already gets - reveals it
-// in-place rather than requiring a page reload, since local-play was only
-// hidden in the first place because a wallet got detected.
+// free select-screen flow local-play's own button already offers -
+// duplicated here so the "no Hoodies yet" status message has its own
+// obvious next step right below it, instead of pointing back up the page.
 freePlayBtn.addEventListener("click", () => {
   playSound("uiclick");
   enterSelectScreen(null);

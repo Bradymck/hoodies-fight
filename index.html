@@ -12,6 +12,11 @@
 <body>
   <h1><img src="assets/branding/logo.png" alt="" id="logo-mark" />HOOD VS HOOD</h1>
 
+  <div id="wallet-chip" class="hidden">
+    <span id="wallet-chip-address"></span>
+    <button id="disconnect-btn">Disconnect</button>
+  </div>
+
   <div id="setup">
     <video id="setup-bg" autoplay loop muted playsinline>
       <source src="assets/backgrounds/setup-bg.mp4" type="video/mp4" />
@@ -22,6 +27,8 @@
         <button id="start-btn">ENTER THE ARENA</button>
         <p id="integrity-check"></p>
       </div>
+
+      <p id="setup-divider" class="hidden">&mdash; or &mdash;</p>
 
       <div id="wallet-play">
         <button id="connect-wallet-btn">CONNECT WALLET &amp; THROW HANDS AS YOUR HOODIE</button>

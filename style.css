@@ -134,6 +134,61 @@ h1 {
   min-height: 1.2em;
 }
 
+#setup-divider {
+  color: #6a6a76;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  margin: 22px 0;
+}
+
+/* Fixed corner chip, not scoped inside #setup - proceedWithWallet moves on
+   to the select screen almost immediately after connecting, so Disconnect
+   has to live somewhere that survives the setup/select-screen/arena
+   transition instead of vanishing with the screen that showed it. */
+#wallet-chip {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #0b0b0fcc;
+  border: 1px solid #3ddc3d44;
+  border-radius: 20px;
+  padding: 6px 8px 6px 14px;
+  font-size: 12px;
+  color: #c8c8d2;
+  letter-spacing: 0.03em;
+}
+
+#wallet-chip.hidden {
+  display: none;
+}
+
+#disconnect-btn {
+  background: transparent;
+  border: 1px solid #ff4444;
+  color: #ff4444;
+  border-radius: 14px;
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: background 0.15s ease-out, box-shadow 0.15s ease-out;
+}
+
+#disconnect-btn:hover {
+  background: #ff444422;
+  box-shadow: 0 0 8px #ff444455;
+}
+
+#disconnect-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 #setup-status {
   font-size: 15px;
   color: #d0d0d8;
