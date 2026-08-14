@@ -4,7 +4,7 @@ import { createGame } from "./game.js";
 import { initSound, playSound, playRandomTrack, stopMusic } from "./sound.js";
 import { pickRandomArena, drawArena, drawFighter } from "./body.js";
 import { speakTaunt } from "./tts.js";
-import { connectWallet, getConnectedAccount, disconnectWallet } from "./wallet.js";
+import { connectWallet, hasInjectedWallet, getConnectedAccount, disconnectWallet } from "./wallet.js";
 import { initBloodCode } from "./blood-code.js";
 
 initBloodCode();
@@ -69,10 +69,9 @@ exitPracticeBtn.addEventListener("click", () => {
 });
 
 // Rotated randomly per visit so the same line doesn't go stale. Both play
-// options are always shown side by side now (see index.html's #play-options)
-// instead of picking one to hide based on whether a wallet extension merely
-// exists, so this no longer needs to be split by mode - one clear line
-// setting up the two cards below is enough.
+// options read clearly on their own now (see index.html's #play-options),
+// so this no longer needs to be split by mode - one clear line setting up
+// the card(s) below is enough either way.
 const HYPE_LINES = [
   "Choose how you want to play:",
   "Two Hoodies enter. One AI leaves in pieces.",
@@ -84,12 +83,39 @@ function setHype() {
 }
 setHype();
 
-// Silently resumes an already-authorized wallet session if one exists -
-// safe to call even with no wallet extension at all (getConnectedAccount
-// just returns null). Both play-option cards stay visible regardless of
-// whether this finds anything; a returning wallet visitor just gets
-// dropped straight into the select screen a moment later, same as before.
-tryResumeWalletSession();
+// Connect Wallet only makes sense to show if a wallet extension actually
+// exists - offering it otherwise just leads to a "no wallet found, install
+// one" error on click. Play Free always stays visible either way; this
+// only ever hides the wallet option, never the free one.
+function hideWalletOption() {
+  document.getElementById("wallet-play").classList.add("hidden");
+  // Some HYPE_LINES mention bringing a Hoodie - not a real option once the
+  // wallet card is gone, so replace whichever one setHype already picked.
+  if (hypeEl) hypeEl.textContent = "Pick two fighters and jump in.";
+}
+
+if (hasInjectedWallet()) {
+  tryResumeWalletSession();
+} else {
+  // Some wallet extensions inject window.ethereum asynchronously, slightly
+  // after this script runs - a single synchronous check at load time can
+  // race and wrongly decide "no wallet" for someone who actually has one.
+  // Give it a brief grace window via the event most wallets fire, with a
+  // timeout fallback so a visitor with no wallet at all isn't left staring
+  // at an option that never resolves either way.
+  let decided = false;
+  const onInit = () => {
+    if (decided) return;
+    decided = true;
+    if (hasInjectedWallet()) {
+      tryResumeWalletSession();
+    } else {
+      hideWalletOption();
+    }
+  };
+  window.addEventListener("ethereum#initialized", onInit, { once: true });
+  setTimeout(onInit, 300);
+}
 
 // ===== Character select screen =====
 //
