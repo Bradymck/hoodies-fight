@@ -948,11 +948,12 @@ canvas {
 }
 
 #integrity-check {
-  margin: 14px 0 0;
+  margin: 14px 0 8px;
   font-size: 14px;
   letter-spacing: 0.03em;
   color: #c8c8d2;
   text-shadow: 0 0 6px #3ddc3d33;
+  text-align: center;
 }
 
 #integrity-check a {
