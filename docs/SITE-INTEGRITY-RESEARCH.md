@@ -22,19 +22,16 @@ this is just the pointer, not the design doc for it.
   something if the thing being served is the thing that was attested. If
   Vercel rebuilds on its own infra, the attestation covers a build nobody
   actually deployed.
-- **The gap this still doesn't close:** the pipeline only covers what's
-  committed to git. Audio (`assets/sounds/`, `assets/music/`) is
-  gitignored, licensed Splice/Suno content — see README's License section
-  for why it can't be committed. That means occasional manual
-  `vercel --prod` deploys straight from local disk are still a thing, and
-  those aren't covered by the attestation at all. Real tension between
-  "what's attested is what's served" and "the audio has to come from
-  somewhere."
-- **Good future fix, not done yet:** move audio to a separate CDN/blob
-  store (Vercel Blob, R2, S3) referenced by absolute URL, fully decoupled
-  from the git-driven deploy pipeline. Then the committed code — the part
-  that actually talks to a wallet — stays 100% reproducible from the repo,
-  and audio just becomes an external asset the page happens to load.
+- **The gap this pipeline only covers what's committed to git** — real
+  concern initially, since audio (licensed Splice/Suno content, see
+  README's License section) is gitignored and used to require manual
+  `vercel --prod` deploys from local disk that bypassed the attestation
+  entirely. **Resolved**: audio now lives in a Vercel Blob store,
+  referenced by absolute URL from `src/sound.js` (`AUDIO_BASE`), fully
+  decoupled from the git-driven deploy pipeline. The committed code — the
+  part that actually talks to a wallet — is 100% reproducible from the
+  repo now; audio is just an external asset the page happens to load, same
+  as the OnChainHoodies head art already was.
 
 ## Watch for later
 

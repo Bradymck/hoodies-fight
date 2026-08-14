@@ -10,11 +10,10 @@ name: Build, attest, and deploy
 # same prebuilt output to Vercel with --prebuilt so nothing can diverge
 # between "what was attested" and "what's live" after this point.
 #
-# Caveat this does NOT cover: gitignored audio (licensed Splice/Suno
-# content, see README's License section) isn't in this checkout at all, so
-# it still needs an occasional manual `vercel --prod` deploy from local
-# disk to reach the live site. That manual deploy overwrites whatever this
-# workflow last shipped - a real, documented tradeoff, not an oversight.
+# Audio (licensed Splice/Suno content, gitignored - see README's License
+# section) is NOT in this checkout, by design - it's served from Vercel
+# Blob instead (src/sound.js's AUDIO_BASE), fully decoupled from this
+# pipeline. No manual deploy-from-local-disk step needed for it anymore.
 
 on:
   push:

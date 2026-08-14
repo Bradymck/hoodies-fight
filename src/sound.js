@@ -1,27 +1,34 @@
-// Every clip here is a paid Splice sample, not bundled in the repo - see
-// .gitignore and the README's licensing note. Missing/failed clips degrade
-// to silence, not a crash - see initSound/playSound below.
+// Every clip here is a paid Splice sample (music is Suno-generated) - not
+// bundled in the repo, see the README's licensing note. Served from Vercel
+// Blob instead of a repo-relative path specifically so they never have to
+// touch git: the CI pipeline (.github/workflows/deploy.yml) only ever sees
+// what's actually committed, and these can't be (see
+// docs/SITE-INTEGRITY-RESEARCH.md for why that pipeline exists at all).
+// Missing/failed clips degrade to silence, not a crash - see
+// initSound/playSound below.
+const AUDIO_BASE = "https://bjnsuc8wmkpgnt3k.public.blob.vercel-storage.com";
+
 const CLIPS = {
-  punch: "assets/sounds/punch.mp3",
-  kick: "assets/sounds/kick.mp3",
-  jump: "assets/sounds/jump.mp3",
-  hit: "assets/sounds/hit.mp3",
-  block: "assets/sounds/block.mp3",
-  ko: "assets/sounds/ko.mp3",
-  powerfull: "assets/sounds/powerfull.mp3",
-  uiclick: "assets/sounds/uiclick.mp3",
-  boltWhoosh: "assets/sounds/bolt-whoosh.mp3",
-  boltImpact: "assets/sounds/bolt-impact.mp3",
+  punch: `${AUDIO_BASE}/punch.mp3`,
+  kick: `${AUDIO_BASE}/kick.mp3`,
+  jump: `${AUDIO_BASE}/jump.mp3`,
+  hit: `${AUDIO_BASE}/hit.mp3`,
+  block: `${AUDIO_BASE}/block.mp3`,
+  ko: `${AUDIO_BASE}/ko.mp3`,
+  powerfull: `${AUDIO_BASE}/powerfull.mp3`,
+  uiclick: `${AUDIO_BASE}/uiclick.mp3`,
+  boltWhoosh: `${AUDIO_BASE}/bolt-whoosh.mp3`,
+  boltImpact: `${AUDIO_BASE}/bolt-impact.mp3`,
 };
 
 const TRACKS = [
-  "assets/music/garbage-world.mp3",
-  "assets/music/lets-go.mp3",
-  "assets/music/missed-calls.mp3",
-  "assets/music/muppet-trash.mp3",
-  "assets/music/trash-panda.mp3",
-  "assets/music/when-trash-cans-dance.mp3",
-  "assets/music/waste-management.mp3",
+  `${AUDIO_BASE}/garbage-world.mp3`,
+  `${AUDIO_BASE}/lets-go.mp3`,
+  `${AUDIO_BASE}/missed-calls.mp3`,
+  `${AUDIO_BASE}/muppet-trash.mp3`,
+  `${AUDIO_BASE}/trash-panda.mp3`,
+  `${AUDIO_BASE}/when-trash-cans-dance.mp3`,
+  `${AUDIO_BASE}/waste-management.mp3`,
 ];
 
 let ctx = null;
