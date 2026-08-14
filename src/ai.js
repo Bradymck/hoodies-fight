@@ -3,6 +3,8 @@
 // game.js can drive an AI fighter through the identical update() path a
 // real player uses instead of needing a special case.
 
+import { SLIDE } from "./fighter.js";
+
 const ENGAGE_RANGE = 95; // close the gap if farther than this
 const ATTACK_RANGE = 82; // attempt an attack once this close
 const SLIDE_REACT_RANGE = 220; // slide closes distance fast, so react to it from further out than a normal swing
@@ -54,8 +56,13 @@ export function createAIController(self, opponent) {
     // both do nothing against it - so it gets its own reaction check ahead
     // of the generic one below, at high odds (jumping it is close to the
     // only sane response) and across a wider window than a normal swing
-    // since it closes distance instead of staying in place.
-    if (opponent.state === "slide" && dist < SLIDE_REACT_RANGE && Math.random() < 0.7 * difficulty) {
+    // since it closes distance instead of staying in place. Slide is now a
+    // real telegraphed, punishable-by-dodge move (it costs real power to
+    // throw), so this needs to actually be a reliable read rather than
+    // something that only shows up once the AI is already hurt - scaled off
+    // a high floor (0.5) instead of straight multiplying difficulty, so
+    // even at DIFFICULTY_MIN this is a ~68% dodge instead of ~25%.
+    if (opponent.state === "slide" && dist < SLIDE_REACT_RANGE && Math.random() < 0.5 + 0.5 * difficulty) {
       input.jump = true;
       return;
     }
@@ -90,8 +97,10 @@ export function createAIController(self, opponent) {
         return;
       }
       // Slide covers ground fast - a real alternative to walking in from a
-      // distance, not just a close-range finisher.
-      if (Math.random() < 0.15 * difficulty) {
+      // distance, not just a close-range finisher. Costs real power now, so
+      // check for it first - otherwise the AI "chooses" slide and just does
+      // nothing that frame once it can't afford it.
+      if (self.power >= SLIDE.cost && Math.random() < 0.15 * difficulty) {
         input.slide = true;
         return;
       }
@@ -110,7 +119,7 @@ export function createAIController(self, opponent) {
         input.special = true;
       } else if (self.power >= 20 && roll < 0.45) {
         input.kick = true;
-      } else if (roll < 0.6) {
+      } else if (self.power >= SLIDE.cost && roll < 0.6) {
         input.slide = true;
       } else if (roll < 0.9) {
         input.punch = true;
@@ -130,7 +139,7 @@ export function createAIController(self, opponent) {
       input.special = true;
       return;
     }
-    if (roll < 0.35 * difficulty) {
+    if (self.power >= SLIDE.cost && roll < 0.35 * difficulty) {
       input.slide = true;
       return;
     }

@@ -26,18 +26,22 @@ const HITSTUN_FRAMES = 24;
 const JUMP_DURATION = 48;
 const JUMP_HEIGHT = 140;
 // Ground-closing move: moves forward on its own the whole time it's active
-// (see updateSlide in game.js) rather than reading movement input. Free,
-// like jump/punch - the danger is landing the hit, not the cost. Exported
+// (see updateSlide in game.js) rather than reading movement input. Exported
 // (along with UPPERCUT below) since game.js's updateSlide/checkUppercutHit
 // need the timing/range numbers directly - unlike damage, none of this
 // varies by archetype, so plain constants rather than a getter.
 // Deliberately short - this is a close-range "get under a jump" dodge/
 // punish, not a full-screen gap closer. duration * SLIDE_SPEED (game.js)
-// now covers roughly one engage-range gap (~175px), not the ~700px arena
-// the old version could cross - that was a mistake, it turned slide into a
+// covers roughly one engage-range gap (~175px), not the ~700px arena the
+// old version could cross - that was a mistake, it turned slide into a
 // free win button from anywhere on screen instead of a real close-range
-// mixup.
-export const SLIDE = { duration: 11, damage: 12, knockback: 90 };
+// mixup. Used to be free and hit for real damage (12) - that turned it into
+// a spammable kill button since it also bypasses block (see takeDamage
+// below) and paid back MORE power than it cost to use (nothing, since it
+// was free). Now it costs a real chunk of power and does barely more than
+// chip damage - the actual payoff is the dodge/reposition (get under a
+// jump, close distance) and the brief stun on landing, not the damage.
+export const SLIDE = { duration: 11, damage: 4, knockback: 90, cost: 30 };
 // How long the "hit by a slide" reaction pose holds before returning to
 // idle - see takeDamage's kind==="slide" branch.
 const KNOCKBACK_DURATION = 28;
@@ -74,7 +78,13 @@ export const HODLER_SPECIAL = { damage: 26, range: 92, duration: 28, activeStart
 // not something you wait out. special itself grants nothing back (already
 // the most expensive thing you can do) - the resource wall is the point.
 const PASSIVE_REGEN_PER_FRAME = 0.03; // ~1.8/sec at 60fps
-const POWER_GAIN = { punch: 10, kick: 12, slide: 14, uppercut: 16, special: 0 };
+// slide's gain used to be the highest of all of these (14) despite costing
+// nothing to use - meaning landing one didn't just cost nothing, it was the
+// fastest power battery in the game. Now that slide has a real cost (30),
+// its gain is deliberately small so landing one still nets a real loss
+// (30 - 6 = 24 power gone) rather than paying for itself - it should stay a
+// deliberate, occasional tool, not something worth spamming even on a hit.
+const POWER_GAIN = { punch: 10, kick: 12, slide: 6, uppercut: 16, special: 0 };
 const BLOCK_POWER_GAIN = 8;
 
 // One mechanical trait per Hood archetype - matches their own "Builders,
@@ -295,7 +305,8 @@ export class Fighter {
       this.setState("uppercut-charge");
       return;
     }
-    if (justPressed.slide) {
+    if (justPressed.slide && this.power >= SLIDE.cost) {
+      this.spendPower(SLIDE.cost);
       this.setState("slide");
       this.lastEvent = "slide-start";
       return;
