@@ -42,6 +42,8 @@ This matters most if you're deciding whether to connect a wallet: [hoodvshood.lo
   diff live.js repo.js  # no output = identical
   ```
 
+- **Cryptographic check**: every deploy is built inside a GitHub Actions runner (not on Vercel's own infra) and signed with a [build provenance attestation](https://github.com/Pixelpushin/hoodies-fight/attestations) before that exact build is pushed to Vercel unmodified (`vercel deploy --prebuilt`) - so the attestation actually covers what's live, not just what GitHub happened to build somewhere. See [docs/SITE-INTEGRITY-RESEARCH.md](docs/SITE-INTEGRITY-RESEARCH.md) for what this does and doesn't cover.
+
 ## Project layout
 
 ```text
