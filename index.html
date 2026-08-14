@@ -44,7 +44,20 @@
           <div class="portrait-frame"><canvas id="p1-portrait" width="800" height="360"></canvas></div>
           <div class="fighter-label" id="p1-select-label">CHOOSE YOUR FIGHTER</div>
         </div>
-        <div id="vs-mark">VS</div>
+        <div id="vs-column">
+          <div id="vs-mark">VS</div>
+          <!-- Single centered button for today's one-player mode (P2 is
+               always AI/random-sample). A future two-player lobby gets its
+               own layout here instead - two independent ready-up buttons
+               side by side in this same center column, one per real
+               player - not a resize of this one. -->
+          <button id="ready-btn" disabled>START BATTLE</button>
+          <label class="practice-toggle" title="Opponent won't fight back">
+            <input id="practice-toggle" type="checkbox" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-text">Practice mode</span>
+          </label>
+        </div>
         <div class="fighter-display" id="p2-display">
           <div class="portrait-frame"><canvas id="p2-portrait" width="800" height="360"></canvas></div>
           <div class="fighter-label" id="p2-select-label">CHOOSE YOUR OPPONENT</div>
@@ -59,10 +72,6 @@
           <div class="panel-grid" id="p2-grid"></div>
           <div class="panel-pagination" id="p2-pagination"></div>
         </div>
-      </div>
-      <div id="select-footer">
-        <label class="practice-toggle"><input id="practice-toggle" type="checkbox" /> Practice mode (opponent won't fight back)</label>
-        <button id="ready-btn" disabled>START BATTLE</button>
       </div>
     </div>
   </div>
