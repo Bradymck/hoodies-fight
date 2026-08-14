@@ -24,6 +24,7 @@
           <label>AI RIVAL <input id="p2-id" type="number" value="120" /></label>
           <button id="start-btn">FIGHT</button>
         </div>
+        <label class="practice-toggle"><input id="practice-toggle-local" type="checkbox" /> Practice mode (opponent won't fight back)</label>
         <p id="setup-status"></p>
       </div>
 
@@ -36,6 +37,7 @@
         <button id="free-play-btn" class="hidden">JUST LET ME FIGHT (FREE, NO NFT NEEDED)</button>
         <div id="character-select" class="hidden">
           <p class="select-title">CHOOSE YOUR FIGHTER</p>
+          <label class="practice-toggle"><input id="practice-toggle-wallet" type="checkbox" /> Practice mode (opponent won't fight back)</label>
           <div id="character-grid"></div>
         </div>
       </div>
@@ -62,6 +64,7 @@
       <span id="round-info">ROUND 1 &middot; 0 - 0</span>
       <span id="p2-name"></span>
     </div>
+    <button id="exit-practice-btn" class="hidden">EXIT PRACTICE</button>
     <div id="canvas-wrap">
       <canvas id="canvas" width="800" height="360"></canvas>
       <div id="taunt-p1" class="taunt hidden"></div>

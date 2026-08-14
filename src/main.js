@@ -32,6 +32,18 @@ const freePlayBtn = document.getElementById("free-play-btn");
 const characterSelect = document.getElementById("character-select");
 const characterGrid = document.getElementById("character-grid");
 const hypeEl = document.getElementById("hype");
+const practiceToggleWallet = document.getElementById("practice-toggle-wallet");
+const practiceToggleLocal = document.getElementById("practice-toggle-local");
+const exitPracticeBtn = document.getElementById("exit-practice-btn");
+
+// Reload is the same "give up on trying to hand-reset every bit of setup
+// state" call as the normal Back to Menu button (see runMatch/
+// showMatchOverActions) - practice just reaches it a different way, since
+// a practice match never ends on its own to get there through that flow.
+exitPracticeBtn.addEventListener("click", () => {
+  stopMusic();
+  location.reload();
+});
 
 // Rotated randomly per visit so the same line doesn't go stale, and split
 // by mode - a wallet holder is about to put their actual Hoodie's name on
@@ -98,6 +110,10 @@ async function startMatch(data1, data2, opts) {
   document.getElementById("arena").classList.remove("hidden");
   document.getElementById("p1-name").textContent = `${data1.name} (${data1.hoodieType})`;
   document.getElementById("p2-name").textContent = `${data2.name} (${data2.hoodieType})`;
+  // Practice never ends on its own (see createGame's practiceMode) - this is
+  // the only way out, since the normal match-over Back/Play Again buttons
+  // are never reached.
+  document.getElementById("exit-practice-btn").classList.toggle("hidden", !opts.practiceMode);
 
   const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d");
@@ -138,7 +154,7 @@ startBtn.addEventListener("click", async () => {
     // Free play fights an AI opponent too, same as the wallet flow - it was
     // quietly requiring a second person on the same keyboard to do
     // anything, which isn't really "free play" for one person.
-    await startMatch(data1, data2, { p2AI: true });
+    await startMatch(data1, data2, { p2AI: true, practiceMode: practiceToggleLocal.checked });
   } catch (err) {
     setupStatus.textContent = err.message;
     startBtn.disabled = false;
@@ -347,7 +363,7 @@ async function pickFighter(tokenId) {
       soundReady,
     ]);
     playSound("uiclick");
-    await startMatch(playerData, aiData, { p2AI: true });
+    await startMatch(playerData, aiData, { p2AI: true, practiceMode: practiceToggleWallet.checked });
   } catch (err) {
     walletStatus.textContent = err.message;
     connectWalletBtn.disabled = false;
@@ -371,13 +387,17 @@ const ROUNDS_TO_WIN = 2;
 // stall the match forever; sudden-death floor guarantees it resolves.
 const DRAW_RETRY_TIME_LIMITS = [45, 30, 15];
 
-async function runMatch(data1, data2, canvas, ctx, { p2AI = false } = {}) {
+async function runMatch(data1, data2, canvas, ctx, { p2AI = false, practiceMode = false } = {}) {
   const wins = { p1: 0, p2: 0 };
   let roundNum = 1;
   let drawStreak = 0;
 
   while (wins.p1 < ROUNDS_TO_WIN && wins.p2 < ROUNDS_TO_WIN) {
-    updateRoundInfo(roundNum, wins);
+    if (practiceMode) {
+      document.getElementById("round-info").textContent = "PRACTICE MODE";
+    } else {
+      updateRoundInfo(roundNum, wins);
+    }
 
     const p1 = new Fighter(data1, 200, 1);
     const p2 = new Fighter(data2, 600, -1);
@@ -415,6 +435,7 @@ async function runMatch(data1, data2, canvas, ctx, { p2AI = false } = {}) {
         p2,
         timeLimit,
         p2AI,
+        practiceMode,
         onEnd: (w) => {
           stopGame();
           resolve(w);

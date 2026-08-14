@@ -145,8 +145,16 @@ function resolveCollision(a, b) {
 
 const SCROLL_KEYS = new Set([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
 
-export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = false }) {
-  const getAIInput = p2AI ? createAIController(p2, p1) : null;
+export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = false, practiceMode = false }) {
+  // A real training dummy, not just a very bad AI - never acts (no attacks,
+  // no blocks, no movement), which is exactly emptyP2Input below. p2AI is
+  // ignored entirely when this is on; readInput(KEYMAP.p2) is also skipped
+  // since nobody's meant to be on the second keymap for solo practice.
+  const emptyP2Input = {
+    left: false, right: false, block: false, crouch: false, jump: false,
+    uppercut: false, slide: false, punch: false, kick: false, special: false,
+  };
+  const getAIInput = practiceMode ? null : p2AI ? createAIController(p2, p1) : null;
   const pressed = new Set();
   const keydown = (e) => {
     const key = e.key.toLowerCase();
@@ -713,7 +721,15 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     frame++;
 
     p1.update(readInput(KEYMAP.p1));
-    p2.update(getAIInput ? getAIInput() : readInput(KEYMAP.p2));
+    p2.update(practiceMode ? emptyP2Input : getAIInput ? getAIInput() : readInput(KEYMAP.p2));
+    // The dummy tops back up to full once it's recovered from the last
+    // combo (back to idle) rather than sitting there half-dead or at 0 -
+    // real hit feedback lands every time (health bar actually drops during
+    // a combo), but there's always a fresh dummy for the next attempt
+    // instead of a match-ending KO interrupting practice.
+    if (practiceMode && p2.state === "idle" && p2.health < p2.maxHealth) {
+      p2.health = p2.maxHealth;
+    }
     resolveCollision(p1, p2);
 
     checkHit(p1, p2);
@@ -749,7 +765,11 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     handleSounds(p2);
     updateHud();
 
-    if (frame % 60 === 0 && timeLeft > 0) {
+    // No countdown in practice - there's no round to time out, and letting
+    // it run would otherwise end "practice" via the timeout ratio-compare
+    // below the instant the dummy takes any damage at all (p1 undamaged
+    // always reads as the higher ratio).
+    if (!practiceMode && frame % 60 === 0 && timeLeft > 0) {
       timeLeft--;
       document.getElementById("timer").textContent = timeLeft;
     }
@@ -780,14 +800,19 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       if (flash < 0.02) flash = 0;
     }
 
-    if (p1.health <= 0 && p2.health <= 0) endRound(null);
-    else if (p1.health <= 0) endRound(p2);
-    else if (p2.health <= 0) endRound(p1);
-    else if (timeLeft <= 0) {
-      const p1Ratio = p1.health / p1.maxHealth;
-      const p2Ratio = p2.health / p2.maxHealth;
-      if (p1Ratio === p2Ratio) endRound(null);
-      else endRound(p1Ratio > p2Ratio ? p1 : p2);
+    // Practice never ends on its own - see exit-practice-btn (main.js) for
+    // the only way out, since none of the normal win conditions apply to a
+    // dummy that can neither be finished off nor time one out.
+    if (!practiceMode) {
+      if (p1.health <= 0 && p2.health <= 0) endRound(null);
+      else if (p1.health <= 0) endRound(p2);
+      else if (p2.health <= 0) endRound(p1);
+      else if (timeLeft <= 0) {
+        const p1Ratio = p1.health / p1.maxHealth;
+        const p2Ratio = p2.health / p2.maxHealth;
+        if (p1Ratio === p2Ratio) endRound(null);
+        else endRound(p1Ratio > p2Ratio ? p1 : p2);
+      }
     }
 
     // Always continues (unlike the old `if (!ended)` gate) - the very next
@@ -797,7 +822,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     if (!stopped) requestAnimationFrame(loop);
   }
 
-  document.getElementById("timer").textContent = timeLeft;
+  document.getElementById("timer").textContent = practiceMode ? "∞" : timeLeft;
   requestAnimationFrame(loop);
 
   return () => {
