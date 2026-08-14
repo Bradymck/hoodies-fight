@@ -59,6 +59,49 @@ disconnectBtn.addEventListener("click", async () => {
   location.reload();
 });
 
+// The social footer/build-verify line only make sense on the initial menu -
+// once a visitor has actually moved into the select screen or a match,
+// hiding them is what makes #arena/#select-screen genuinely full-screen
+// instead of leaving something scrollable-into below them.
+function hideLandingFooter() {
+  document.getElementById("site-footer")?.classList.add("hidden");
+  document.getElementById("integrity-check")?.classList.add("hidden");
+}
+
+const canvasStage = document.getElementById("canvas-stage");
+const canvasWrap = document.getElementById("canvas-wrap");
+
+// Same measure-and-fit approach the character-select screen's portraits
+// use (fitSelectScreen) - sizes #canvas-wrap to the exact largest
+// 800x360-ratio box that fits #canvas-stage, so the canvas (width/height
+// 100% of that wrapper) always fills the screen without ever being cropped
+// or leaving the HUD/taunt/countdown overlays (positioned against this
+// same wrapper) misaligned with the canvas's actual visible pixels.
+function fitArenaCanvas() {
+  if (document.getElementById("arena").classList.contains("hidden")) return;
+  const availW = canvasStage.clientWidth;
+  const availH = canvasStage.clientHeight;
+  const scale = Math.min(availW / 800, availH / 360);
+  canvasWrap.style.width = `${Math.floor(800 * scale)}px`;
+  canvasWrap.style.height = `${Math.floor(360 * scale)}px`;
+}
+window.addEventListener("resize", fitArenaCanvas);
+
+const controlsInfoBtn = document.getElementById("controls-info-btn");
+const controlsPanel = document.getElementById("controls-panel");
+controlsInfoBtn.addEventListener("click", () => {
+  controlsPanel.classList.toggle("open");
+});
+// Clicking anywhere outside the open panel (including the info button
+// itself, which the toggle above already handles) closes it - a slide-out
+// panel that only closes by re-hitting a tiny corner button is easy to get
+// stuck open by accident mid-match.
+document.addEventListener("click", (e) => {
+  if (!controlsPanel.classList.contains("open")) return;
+  if (controlsPanel.contains(e.target) || e.target === controlsInfoBtn) return;
+  controlsPanel.classList.remove("open");
+});
+
 // Reload is the same "give up on trying to hand-reset every bit of setup
 // state" call as the normal Back to Menu button (see runMatch/
 // showMatchOverActions) - practice just reaches it a different way, since
@@ -407,6 +450,7 @@ function renderPagination(side) {
 async function enterSelectScreen(walletTokenIds) {
   document.getElementById("setup").classList.add("hidden");
   document.querySelector("h1").classList.add("hidden");
+  hideLandingFooter();
   selectScreen.classList.remove("hidden");
   selectScreen.style.setProperty(
     "--select-bg-image",
@@ -441,6 +485,7 @@ readyBtn.addEventListener("click", async () => {
 async function startMatch(data1, data2, opts) {
   selectScreen.classList.add("hidden");
   document.getElementById("arena").classList.remove("hidden");
+  fitArenaCanvas();
   document.getElementById("p1-name").textContent = `${data1.name} (${data1.hoodieType})`;
   document.getElementById("p2-name").textContent = `${data2.name} (${data2.hoodieType})`;
   // Practice never ends on its own (see createGame's practiceMode) - this is

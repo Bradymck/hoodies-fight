@@ -715,17 +715,69 @@ h1 {
   display: none !important;
 }
 
+/* Fixed full-viewport, not part of normal document flow - the old layout
+   (max-width block sitting in the page below the header) let the controls
+   text and footer push the total page height past the viewport, so the
+   whole page scrolled during a match. This can't scroll: everything that
+   matters (HUD, canvas, controls) is either sized to fit inside it or
+   overlaid on top of it. */
 #arena {
-  max-width: min(96vw, 1500px);
-  margin: 16px auto;
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: #0b0b0f;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* Purely a centering stage for #canvas-wrap - fills whatever space #arena
+   has, #canvas-wrap itself gets an exact pixel size from fitArenaCanvas()
+   in main.js (the same measure-and-fit approach the character-select
+   screen's portraits already use) and stays centered inside it. */
+#canvas-stage {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Sized in JS (fitArenaCanvas) to the exact largest 800x360-ratio box that
+   fits the screen, so the canvas below can just fill it at width/height
+   100% - and so the HUD/names/taunts/countdown/result overlays positioned
+   against THIS box line up with the canvas's real visible pixels instead
+   of some larger flex-stretched wrapper. */
+#canvas-wrap {
   position: relative;
 }
 
+canvas {
+  background: #1b1330;
+  image-rendering: pixelated;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Fighting-game standard: health/power bars and names sit directly on top
+   of the game view instead of in their own strip above it - lets the
+   canvas actually use the full screen instead of giving up a fixed slice
+   of height to make room for them. Percent-based insets (not px) so they
+   scale together with the canvas at any screen size, same convention
+   .taunt/#countdown/#result already use below. */
 .hud {
+  position: absolute;
+  top: 2.5%;
+  left: 2.5%;
+  right: 2.5%;
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 4px;
+  z-index: 2;
 }
 
 .bars {
@@ -740,7 +792,7 @@ h1 {
   height: 22px;
   background: #161620;
   border: 2px solid #555;
-  box-shadow: inset 0 0 0 1px #000;
+  box-shadow: inset 0 0 0 1px #000, 0 1px 4px #000c;
 }
 
 .powerbar {
@@ -776,38 +828,46 @@ h1 {
   font-family: "Bungee", "Courier New", monospace;
   font-size: 30px;
   color: #ffe066;
-  text-shadow: 0 0 6px #ffe06699;
+  text-shadow: 0 0 6px #ffe06699, 0 2px 4px #000c;
 }
 
 .names {
+  position: absolute;
+  top: calc(2.5% + 40px);
+  left: 2.5%;
+  right: 2.5%;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 2px 8px;
   font-size: 16px;
-  opacity: 0.9;
-  margin-bottom: 4px;
   letter-spacing: 0.05em;
+  text-shadow: 0 1px 3px #000, 0 2px 8px #000c;
 }
 
 #round-info {
   font-size: 14px;
   color: #ffe066;
-  opacity: 0.9;
   letter-spacing: 0.1em;
 }
 
 /* Only shown while a practice match is running (main.js toggles this in
    startMatch) - it's the only way out, since practice never ends on its own
-   the way a normal match does (see createGame's practiceMode). Small and
-   corner-anchored rather than competing with the health bars/names for
-   attention. */
+   the way a normal match does (see createGame's practiceMode). Fixed to the
+   viewport (not the HUD flow, which is now overlaid on the canvas) so it
+   stays reachable regardless of canvas size, out of the way in a corner
+   rather than competing with the health bars/names for attention. */
+/* Top-left, not top-right - #wallet-chip is fixed there too and both can
+   be visible at once (a connected wallet, in practice mode). */
 #exit-practice-btn {
-  display: block;
-  margin: 0 auto 8px;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 20;
   padding: 6px 16px;
-  background: transparent;
+  background: #0b0b0fcc;
   color: #ff6b6b;
   border: 2px solid #ff6b6b;
   cursor: pointer;
@@ -820,21 +880,6 @@ h1 {
 #exit-practice-btn:hover {
   transform: scale(1.05);
   background: #ff6b6b22;
-}
-
-#canvas-wrap {
-  position: relative;
-}
-
-canvas {
-  background: #1b1330;
-  border: 2px solid #444;
-  box-shadow: 0 0 0 4px #0b0b0f, 0 0 24px #3ddc3d22;
-  image-rendering: pixelated;
-  width: 100%;
-  max-width: min(96vw, 1500px);
-  aspect-ratio: 800 / 360;
-  display: block;
 }
 
 /* Positioned relative to #canvas-wrap, which matches the canvas's own
@@ -942,9 +987,66 @@ canvas {
 }
 
 .controls {
-  font-size: 15px;
+  font-size: 14px;
+  line-height: 1.6;
   color: #b8b8c2;
-  margin-top: 10px;
+  text-align: left;
+  margin: 0 0 14px;
+}
+
+.controls:last-child {
+  margin-bottom: 0;
+}
+
+/* Small and out of the way in a bottom corner rather than sitting in the
+   game's sightline - the two paragraphs of control text used to just run
+   permanently along the bottom of the page; now they only take up space
+   when a visitor actually asks for them. */
+#controls-info-btn {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 20;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #0b0b0fcc;
+  border: 1px solid #3ddc3d88;
+  color: #3ddc3d;
+  font-family: "Bungee", "Courier New", monospace;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s ease-out, box-shadow 0.15s ease-out;
+}
+
+#controls-info-btn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 10px #3ddc3d66;
+}
+
+/* Off-screen via transform (not display:none) so the slide transition has
+   something to animate - position:fixed keeps it out of layout either way,
+   so this never affects #arena's own sizing or scroll. */
+#controls-panel {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 19;
+  width: min(320px, 86vw);
+  background: #0b0b0fee;
+  border-right: 1px solid #3ddc3d44;
+  padding: 64px 22px 22px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  transform: translateX(-100%);
+  transition: transform 0.2s ease-out;
+}
+
+#controls-panel.open {
+  transform: translateX(0);
 }
 
 #integrity-check {

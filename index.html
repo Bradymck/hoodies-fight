@@ -83,39 +83,49 @@
   </div>
 
   <div id="arena" class="hidden">
-    <div class="hud">
-      <div class="bars">
-        <div class="healthbar"><div id="p1-health" class="health-fill"></div></div>
-        <div class="powerbar"><div id="p1-power" class="power-fill"></div></div>
-      </div>
-      <div id="timer">60</div>
-      <div class="bars">
-        <div class="healthbar"><div id="p2-health" class="health-fill"></div></div>
-        <div class="powerbar"><div id="p2-power" class="power-fill"></div></div>
-      </div>
-    </div>
-    <div class="names">
-      <span id="p1-name"></span>
-      <span id="round-info">ROUND 1 &middot; 0 - 0</span>
-      <span id="p2-name"></span>
-    </div>
     <button id="exit-practice-btn" class="hidden">EXIT PRACTICE</button>
-    <div id="canvas-wrap">
-      <canvas id="canvas" width="800" height="360"></canvas>
-      <div id="taunt-p1" class="taunt hidden"></div>
-      <div id="taunt-p2" class="taunt hidden"></div>
-      <div id="countdown" class="hidden"></div>
-      <div id="result" class="hidden">
-        <div id="result-title"></div>
-        <div id="result-quote"></div>
-        <div id="result-actions" class="hidden">
-          <button id="result-again" class="hidden">PLAY AGAIN</button>
-          <button id="result-back">BACK TO MENU</button>
+    <div id="canvas-stage">
+      <div id="canvas-wrap">
+        <canvas id="canvas" width="800" height="360"></canvas>
+        <!-- Overlaid directly on the game view (health/power bars up top,
+             names just below) rather than sitting in their own strip above
+             the canvas - standard fighting-game HUD placement, and it means
+             the canvas itself can actually use the full screen instead of
+             giving up a fixed slice of height to make room above it. -->
+        <div class="hud">
+          <div class="bars">
+            <div class="healthbar"><div id="p1-health" class="health-fill"></div></div>
+            <div class="powerbar"><div id="p1-power" class="power-fill"></div></div>
+          </div>
+          <div id="timer">60</div>
+          <div class="bars">
+            <div class="healthbar"><div id="p2-health" class="health-fill"></div></div>
+            <div class="powerbar"><div id="p2-power" class="power-fill"></div></div>
+          </div>
+        </div>
+        <div class="names">
+          <span id="p1-name"></span>
+          <span id="round-info">ROUND 1 &middot; 0 - 0</span>
+          <span id="p2-name"></span>
+        </div>
+        <div id="taunt-p1" class="taunt hidden"></div>
+        <div id="taunt-p2" class="taunt hidden"></div>
+        <div id="countdown" class="hidden"></div>
+        <div id="result" class="hidden">
+          <div id="result-title"></div>
+          <div id="result-quote"></div>
+          <div id="result-actions" class="hidden">
+            <button id="result-again" class="hidden">PLAY AGAIN</button>
+            <button id="result-back">BACK TO MENU</button>
+          </div>
         </div>
       </div>
     </div>
-    <p class="controls">A/D move &nbsp;&middot;&nbsp; Space jump &nbsp;&middot;&nbsp; S crouch &nbsp;&middot;&nbsp; C block &nbsp;&middot;&nbsp; F punch &nbsp;&middot;&nbsp; G kick &nbsp;&middot;&nbsp; R special &nbsp;&middot;&nbsp; W uppercut &nbsp;&middot;&nbsp; E slide</p>
-    <p class="controls">Punch builds power &nbsp;|&nbsp; kick/special spend it, everything else is free &nbsp;|&nbsp; crouch ducks kicks and high specials (bolt, high kick) &nbsp;|&nbsp; ground attacks (rat rush, sweep kick, slides) can only be jumped &nbsp;|&nbsp; block stops punch/kick but not specials or slides &nbsp;|&nbsp; uppercut punishes a jump in close</p>
+    <button id="controls-info-btn" aria-label="Controls &amp; tips" title="Controls &amp; tips">?</button>
+    <div id="controls-panel">
+      <p class="controls">A/D move &nbsp;&middot;&nbsp; Space jump &nbsp;&middot;&nbsp; S crouch &nbsp;&middot;&nbsp; C block &nbsp;&middot;&nbsp; F punch &nbsp;&middot;&nbsp; G kick &nbsp;&middot;&nbsp; R special &nbsp;&middot;&nbsp; W uppercut &nbsp;&middot;&nbsp; E slide</p>
+      <p class="controls">Punch builds power &nbsp;|&nbsp; kick/special spend it, everything else is free &nbsp;|&nbsp; crouch ducks kicks and high specials (bolt, high kick) &nbsp;|&nbsp; ground attacks (rat rush, sweep kick, slides) can only be jumped &nbsp;|&nbsp; block stops punch/kick but not specials or slides &nbsp;|&nbsp; uppercut punishes a jump in close</p>
+    </div>
   </div>
 
   <footer id="site-footer">
