@@ -39,12 +39,29 @@ async function apiFetch(path) {
 // reading as empty regardless of what it actually held). Kept the old
 // guesses as a fallback in case the shape ever varies, but `items` is the
 // one to trust.
+//
+// `next` was previously ignored entirely - a wallet holding more than one
+// page's worth (the API defaults to 100/request, 200 max) silently lost
+// everything past the first page, with no error or indication anything was
+// missing. Now walks every page. WALLET_HOODIES_HARD_CAP is a backstop
+// against a pathological wallet (or a misbehaving API) making this loop
+// forever, not a real expected limit - the character-select screen pages
+// through whatever comes back either way.
+const WALLET_HOODIES_HARD_CAP = 2000;
+
 export async function fetchWalletHoodies(address) {
   try {
-    const res = await apiFetch(`/wallet/${address}/hoodies`);
-    if (!res.ok) throw new Error(`Could not load Hoodies for ${address}`);
-    const data = await res.json();
-    const list = data?.items ?? data?.hoodies ?? data?.tokens ?? (Array.isArray(data) ? data : []);
+    const list = [];
+    let next = null;
+    do {
+      const path = `/wallet/${address}/hoodies?limit=200${next ? `&next=${encodeURIComponent(next)}` : ""}`;
+      const res = await apiFetch(path);
+      if (!res.ok) throw new Error(`Could not load Hoodies for ${address}`);
+      const data = await res.json();
+      const page = data?.items ?? data?.hoodies ?? data?.tokens ?? (Array.isArray(data) ? data : []);
+      list.push(...page);
+      next = data?.next ?? null;
+    } while (next && list.length < WALLET_HOODIES_HARD_CAP);
     return list.map((entry) => (typeof entry === "object" ? entry.tokenId ?? entry.id : entry));
   } catch (err) {
     // Same "only once retries are exhausted" gate as fetchToken - a real

@@ -19,13 +19,7 @@
     <div id="setup-content">
       <p class="hype" id="hype">Pick two Hoodies. Beat the AI senseless.</p>
       <div id="local-play">
-        <div class="setup-form">
-          <label>YOUR HOODIE <input id="p1-id" type="number" value="125" /></label>
-          <label>AI RIVAL <input id="p2-id" type="number" value="120" /></label>
-          <button id="start-btn">FIGHT</button>
-        </div>
-        <label class="practice-toggle"><input id="practice-toggle-local" type="checkbox" /> Practice mode (opponent won't fight back)</label>
-        <p id="setup-status"></p>
+        <button id="start-btn">ENTER THE ARENA</button>
       </div>
 
       <div id="wallet-play">
@@ -35,15 +29,41 @@
           GET A HOODIE ON OPENSEA
         </a>
         <button id="free-play-btn" class="hidden">JUST LET ME FIGHT (FREE, NO NFT NEEDED)</button>
-        <div id="character-select" class="hidden">
-          <p class="select-title">CHOOSE YOUR FIGHTER</p>
-          <label class="practice-toggle"><input id="practice-toggle-wallet" type="checkbox" /> Practice mode (opponent won't fight back)</label>
-          <div id="character-grid"></div>
-        </div>
       </div>
 
       <p class="controls">Builder = harder hits &nbsp;|&nbsp; Flipper = faster &nbsp;|&nbsp; Hodler = more health &nbsp;|&nbsp; Collector = blocks better &nbsp;|&nbsp; rare traits add a small health bonus</p>
       <p class="controls">Specials differ by type: Builder throws a big flying high kick, Flipper unleashes a hood rat rush along the ground, Hodler lands a low sweep kick that eats hits and stops slides cold, Collector fires the long-range bolt</p>
+    </div>
+  </div>
+
+  <div id="select-screen" class="hidden">
+    <div id="select-bg"></div>
+    <div id="select-content">
+      <div id="select-fighters">
+        <div class="fighter-display" id="p1-display">
+          <div class="portrait-frame"><canvas id="p1-portrait" width="800" height="360"></canvas></div>
+          <div class="fighter-label" id="p1-select-label">CHOOSE YOUR FIGHTER</div>
+        </div>
+        <div id="vs-mark">VS</div>
+        <div class="fighter-display" id="p2-display">
+          <div class="portrait-frame"><canvas id="p2-portrait" width="800" height="360"></canvas></div>
+          <div class="fighter-label" id="p2-select-label">CHOOSE YOUR OPPONENT</div>
+        </div>
+      </div>
+      <div id="select-panels">
+        <div class="select-panel" id="p1-panel">
+          <div class="panel-grid" id="p1-grid"></div>
+          <div class="panel-pagination" id="p1-pagination"></div>
+        </div>
+        <div class="select-panel" id="p2-panel">
+          <div class="panel-grid" id="p2-grid"></div>
+          <div class="panel-pagination" id="p2-pagination"></div>
+        </div>
+      </div>
+      <div id="select-footer">
+        <label class="practice-toggle"><input id="practice-toggle" type="checkbox" /> Practice mode (opponent won't fight back)</label>
+        <button id="ready-btn" disabled>START BATTLE</button>
+      </div>
     </div>
   </div>
 

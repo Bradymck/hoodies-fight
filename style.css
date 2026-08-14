@@ -82,30 +82,6 @@ h1 {
   margin: 0 0 20px;
 }
 
-.setup-form {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: 10px 4px;
-}
-
-.setup-form label {
-  font-size: 15px;
-  letter-spacing: 0.05em;
-}
-
-#setup input {
-  width: 80px;
-  margin: 0 8px;
-  background: #1a1a22;
-  color: #fff;
-  border: 1px solid #444;
-  padding: 6px;
-  font-family: inherit;
-  font-size: 15px;
-}
-
 #setup button {
   padding: 10px 24px;
   background: #3ddc3d;
@@ -232,10 +208,6 @@ h1 {
   background: #3ddc3d22;
 }
 
-#character-select {
-  margin-top: 12px;
-}
-
 .select-title {
   font-family: "Bungee", "Courier New", monospace;
   font-size: 15px;
@@ -336,6 +308,203 @@ h1 {
   border-radius: 50%;
   box-shadow: 0 0 6px #3ddc3d55;
   cursor: help;
+}
+
+/* ===== Character select (MK-style dual-portrait picker) ===== */
+
+#select-screen {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  z-index: 5;
+}
+
+/* Oversized + inset-negative rather than blurred at its own edges - a
+   filter: blur() on an element sized exactly to its container smears its
+   own edge into visible soft/transparent borders. Sizing it past the
+   viewport on every side by more than the blur radius keeps the blurred
+   edge permanently off-screen. */
+#select-bg {
+  position: fixed;
+  inset: -40px;
+  background-image: var(--select-bg-image, none);
+  background-size: cover;
+  background-position: center;
+  filter: blur(14px) brightness(0.55);
+  z-index: -1;
+}
+
+#select-content {
+  position: relative;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 24px 16px 40px;
+}
+
+#select-fighters {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4vw;
+  width: 100%;
+  max-width: 1100px;
+}
+
+.fighter-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Fixed-size window that crops the wide 800x360 arena-shaped canvas down
+   to a tall MK-style bust portrait - simpler than teaching drawFighter a
+   second coordinate system just for this screen, since the canvas already
+   renders the exact same idle-loop fighter the pre-fight/in-match screens
+   do. The canvas is scaled+shifted via CSS transform inside this
+   overflow:hidden window instead. */
+.portrait-frame {
+  width: min(38vw, 320px);
+  height: min(48vw, 400px);
+  overflow: hidden;
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px #3ddc3d55, 0 0 30px #000a;
+  background: radial-gradient(ellipse at 50% 70%, #1b133066, transparent 70%);
+}
+
+.portrait-frame canvas {
+  width: 100%;
+  height: auto;
+  transform: scale(2.6) translate(0, 6%);
+  transform-origin: 50% 62%;
+  image-rendering: pixelated;
+}
+
+#p2-display .portrait-frame canvas {
+  transform: scale(2.6) translate(0, 6%) scaleX(-1);
+}
+
+.fighter-label {
+  margin-top: 10px;
+  font-family: "Bungee", "Courier New", monospace;
+  font-size: clamp(12px, 1.6vw, 16px);
+  letter-spacing: 0.08em;
+  color: #ffe066;
+  text-shadow: 0 0 8px #ffe06699;
+  text-align: center;
+}
+
+#vs-mark {
+  font-family: "Bungee", "Courier New", monospace;
+  font-size: clamp(20px, 3vw, 34px);
+  color: #ff4444;
+  text-shadow: 0 0 12px #ff4444aa, 0 0 30px #ff444455;
+  flex-shrink: 0;
+}
+
+#select-panels {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+  max-width: 1100px;
+}
+
+.select-panel {
+  flex: 1;
+  min-width: 0;
+  background: #0b0b0fcc;
+  border: 2px solid #3ddc3d33;
+  border-radius: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 8px;
+  min-height: 160px;
+}
+
+.panel-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #d0d0d8;
+  letter-spacing: 0.05em;
+}
+
+.panel-pagination button {
+  padding: 4px 10px;
+  background: transparent;
+  color: #3ddc3d;
+  border: 1px solid #3ddc3d88;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.panel-pagination button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.panel-pagination button:not(:disabled):hover {
+  background: #3ddc3d22;
+}
+
+.character-card.selected {
+  border-color: #ffe066;
+  box-shadow: 0 0 10px #ffe06699;
+}
+
+#select-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+#ready-btn {
+  padding: 14px 40px;
+  background: #3ddc3d;
+  color: #0b0b0f;
+  border: none;
+  cursor: pointer;
+  font-family: "Bungee", "Courier New", monospace;
+  font-size: 18px;
+  letter-spacing: 0.1em;
+  box-shadow: 0 0 0 2px #0b0b0f, 0 0 16px #3ddc3d88;
+  transition: transform 0.1s ease-out;
+}
+
+#ready-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+
+#ready-btn:disabled {
+  background: #333;
+  color: #777;
+  box-shadow: none;
+  cursor: default;
+}
+
+@media (max-width: 640px) {
+  #select-fighters {
+    gap: 2vw;
+  }
+  #select-panels {
+    flex-direction: column;
+  }
 }
 
 /* A single shared node appended straight to <body> (see attachBadgeTooltip

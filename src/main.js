@@ -24,16 +24,13 @@ window.addEventListener("keydown", (e) => {
 });
 
 const startBtn = document.getElementById("start-btn");
-const setupStatus = document.getElementById("setup-status");
 const connectWalletBtn = document.getElementById("connect-wallet-btn");
 const walletStatus = document.getElementById("wallet-status");
 const openseaBtn = document.getElementById("opensea-btn");
 const freePlayBtn = document.getElementById("free-play-btn");
-const characterSelect = document.getElementById("character-select");
-const characterGrid = document.getElementById("character-grid");
 const hypeEl = document.getElementById("hype");
-const practiceToggleWallet = document.getElementById("practice-toggle-wallet");
-const practiceToggleLocal = document.getElementById("practice-toggle-local");
+const practiceToggle = document.getElementById("practice-toggle");
+const readyBtn = document.getElementById("ready-btn");
 const exitPracticeBtn = document.getElementById("exit-practice-btn");
 
 // Reload is the same "give up on trying to hand-reset every bit of setup
@@ -104,135 +101,45 @@ if (hasInjectedWallet()) {
   setTimeout(onInit, 300);
 }
 
-async function startMatch(data1, data2, opts) {
-  document.getElementById("setup").classList.add("hidden");
-  document.querySelector("h1").classList.add("hidden");
-  document.getElementById("arena").classList.remove("hidden");
-  document.getElementById("p1-name").textContent = `${data1.name} (${data1.hoodieType})`;
-  document.getElementById("p2-name").textContent = `${data2.name} (${data2.hoodieType})`;
-  // Practice never ends on its own (see createGame's practiceMode) - this is
-  // the only way out, since the normal match-over Back/Play Again buttons
-  // are never reached.
-  document.getElementById("exit-practice-btn").classList.toggle("hidden", !opts.practiceMode);
+// ===== Character select screen =====
+//
+// MK-style: two independent panels (P1 left, P2 right), each its own pool
+// of token IDs to page through, each with its own big animated portrait.
+// P1's pool is the connected wallet's real Hoodies (paginated - see
+// fetchWalletHoodies's own pagination fix) if one's connected, otherwise a
+// random sample same as P2 always is (P2 is always AI for now - there's no
+// second wallet to pull from). Deliberately built as two symmetric,
+// independent panels rather than one shared grid both sides pick from in
+// turn - that's not a stylistic choice, it's the shape the future shared-
+// lobby system needs (P2's pool source becomes "the other real connected
+// player" instead of a random sample; nothing else about this screen has
+// to change).
 
-  const canvas = document.getElementById("canvas");
-  const ctx = canvas.getContext("2d");
+const PANEL_PAGE_SIZE = 12;
+const RANDOM_POOL_SIZE = 48;
+const MAX_TOKEN_ID = 5999;
+const ARENA_BG_IMAGES = ["assets/backgrounds/arena-2.png", "assets/backgrounds/arena-3.png"];
 
-  // runMatch resolves once the whole match (not just a round) is decided,
-  // with true if the vs-AI-only "Play Again" was clicked - see
-  // showMatchOverActions. Anything else (Back, or a PvP match once that
-  // exists) falls through to a full reload instead of trying to hand-reset
-  // every bit of setup-screen state (wallet connection, character grid,
-  // free-play vs wallet-play panel) - simpler and can't leave the UI in a
-  // half-reset state a real reload wouldn't have.
-  let playAgain = true;
-  while (playAgain) {
-    playRandomTrack();
-    playAgain = await runMatch(data1, data2, canvas, ctx, opts);
+const selectScreen = document.getElementById("select-screen");
+const p1Grid = document.getElementById("p1-grid");
+const p2Grid = document.getElementById("p2-grid");
+const p1Pagination = document.getElementById("p1-pagination");
+const p2Pagination = document.getElementById("p2-pagination");
+const p1Label = document.getElementById("p1-select-label");
+const p2Label = document.getElementById("p2-select-label");
+
+function randomTokenPool(count) {
+  const pool = new Set();
+  while (pool.size < count) {
+    pool.add(1 + Math.floor(Math.random() * MAX_TOKEN_ID));
   }
-  stopMusic();
-  location.reload();
+  return [...pool];
 }
 
-startBtn.addEventListener("click", async () => {
-  const id1 = document.getElementById("p1-id").value;
-  const id2 = document.getElementById("p2-id").value;
-
-  startBtn.disabled = true;
-  setupStatus.textContent = "Suiting up...";
-  // initSound() must be kicked off from this click handler - browsers block
-  // audio until a real user gesture, and this is the closest one we get.
-  const soundReady = initSound();
-
-  try {
-    const [data1, data2] = await Promise.all([
-      loadFighterData(id1),
-      loadFighterData(id2),
-      soundReady,
-    ]);
-    playSound("uiclick");
-    // Free play fights an AI opponent too, same as the wallet flow - it was
-    // quietly requiring a second person on the same keyboard to do
-    // anything, which isn't really "free play" for one person.
-    await startMatch(data1, data2, { p2AI: true, practiceMode: practiceToggleLocal.checked });
-  } catch (err) {
-    setupStatus.textContent = err.message;
-    startBtn.disabled = false;
-  }
-});
-
-// Shared by both the manual "Connect Wallet" click and the silent
-// auto-resume path below - the only difference is whether a real user
-// gesture backs this call (unlockSound), since initSound()/an audible
-// click sound both need one and the resume path doesn't have one to spend.
-async function proceedWithWallet(address, { unlockSound }) {
-  walletStatus.textContent = "Scanning the chain for your Hoodies...";
-  const soundReady = unlockSound ? initSound() : Promise.resolve();
-
-  try {
-    const tokenIds = await fetchWalletHoodies(address);
-    await soundReady;
-    if (unlockSound) playSound("uiclick");
-
-    if (!tokenIds.length) {
-      walletStatus.textContent = "No Hoodies in this wallet yet - grab one and come back swinging.";
-      openseaBtn.classList.remove("hidden");
-      // Not everyone with a wallet wants to buy in just to try it out - this
-      // drops them straight into the same free local-play flow as someone
-      // with no wallet at all, no NFT required.
-      freePlayBtn.classList.remove("hidden");
-      connectWalletBtn.disabled = false;
-      return;
-    }
-
-    openseaBtn.classList.add("hidden");
-    freePlayBtn.classList.add("hidden");
-    walletStatus.textContent = `${tokenIds.length} Hoodie${tokenIds.length === 1 ? "" : "s"} found - pick your fighter.`;
-    await renderCharacterGrid(tokenIds);
-  } catch (err) {
-    walletStatus.textContent = err.message;
-    connectWalletBtn.disabled = false;
-  }
-}
-
-connectWalletBtn.addEventListener("click", async () => {
-  connectWalletBtn.disabled = true;
-  walletStatus.textContent = "Connecting wallet...";
-  openseaBtn.classList.add("hidden");
-  freePlayBtn.classList.add("hidden");
-
-  try {
-    const address = await connectWallet();
-    await proceedWithWallet(address, { unlockSound: true });
-  } catch (err) {
-    walletStatus.textContent = err.message;
-    connectWalletBtn.disabled = false;
-  }
-});
-
-// eth_accounts never prompts - if this site already has permission from an
-// earlier visit/click, skip straight to "pick your fighter" instead of
-// making a returning visitor click Connect again on every reload/back-
-// navigation. unlockSound stays false here (no real gesture backs this
-// call, initSound() would just start suspended) - the character-card click
-// in renderCharacterGrid unlocks it instead, same as startBtn's own click
-// already does for local play.
-async function tryResumeWalletSession() {
-  const address = await getConnectedAccount();
-  if (!address) return;
-  connectWalletBtn.disabled = true;
-  await proceedWithWallet(address, { unlockSound: false });
-}
-
-// Drops a wallet-connected-but-no-Hoodie visitor straight into the same
-// free local-play form a no-wallet visitor already gets - reveals it
-// in-place rather than requiring a page reload, since local-play was only
-// hidden in the first place because a wallet got detected.
-freePlayBtn.addEventListener("click", () => {
-  document.getElementById("wallet-play").classList.add("hidden");
-  document.getElementById("local-play").classList.remove("hidden");
-  setHype(HYPE_LOCAL);
-});
+const panelState = {
+  p1: { pool: [], page: 0, selectedId: null, selectedData: null },
+  p2: { pool: [], page: 0, selectedId: null, selectedData: null },
+};
 
 // Emoji + flavor text per archetype - the numbers (damage/speed/health/
 // block multipliers) come straight from fighter.js's own ARCHETYPES so this
@@ -260,52 +167,6 @@ function archetypeTooltip(type, rareTraitCount) {
     lines.push(`+${Math.round(rareTraitCount * RARE_TRAIT_HEALTH_BONUS * 100)}% health (${rareTraitCount} rare trait${rareTraitCount === 1 ? "" : "s"})`);
   }
   return lines.join("\n");
-}
-
-async function renderCharacterGrid(tokenIds) {
-  // The grid used to just sit empty while every token's art loaded in
-  // parallel - blank space with no feedback reads as broken, not loading.
-  characterGrid.innerHTML = `
-    <div class="grid-loading">
-      <div class="spinner"></div>
-      <p>Loading your fighters...</p>
-    </div>
-  `;
-  characterSelect.classList.remove("hidden");
-
-  const previews = await Promise.all(
-    tokenIds.map(async (id) => {
-      try {
-        return await fetchToken(id);
-      } catch {
-        return null;
-      }
-    }),
-  );
-
-  characterGrid.innerHTML = "";
-  previews.forEach((token, i) => {
-    if (!token) return;
-    const id = tokenIds[i];
-    // The token's own name is just its collection index ("OnChainHoodies
-    // #495") - not useful for picking a fighter. The archetype is what
-    // actually matters here (it's what determines their stats and special),
-    // so that's the label, with a hover badge for the specifics.
-    const type = token.traits?.hoodie ?? "Builder";
-    const { dress, mouth, top, eyes } = token.traits ?? {};
-    const rareTraitCount = [dress, mouth, top, eyes].filter((t) => t?.tier === "Rare").length;
-    const info = ARCHETYPE_INFO[type];
-    const card = document.createElement("div");
-    card.className = "character-card";
-    card.innerHTML = `
-      <img src="${token.image?.svg ?? ""}" alt="${type}" />
-      <div class="card-label">${type}</div>
-      ${info ? `<div class="card-badge">${info.emoji}</div>` : ""}
-    `;
-    card.addEventListener("click", () => pickFighter(id));
-    if (info) attachBadgeTooltip(card.querySelector(".card-badge"), archetypeTooltip(type, rareTraitCount));
-    characterGrid.appendChild(card);
-  });
 }
 
 // One shared tooltip node, appended straight to <body> - NOT nested inside
@@ -348,37 +209,277 @@ function attachBadgeTooltip(badge, text) {
   });
 }
 
-async function pickFighter(tokenId) {
-  characterSelect.classList.add("hidden");
-  walletStatus.textContent = "Suiting up...";
-  // Normally a no-op - connectWalletBtn's click already unlocked sound. On
-  // the silent auto-resume path (tryResumeWalletSession) nothing did yet,
-  // since that path has no real user gesture of its own to spend - this
-  // click is the first one, so it's the one that has to do it.
-  const soundReady = initSound();
+// Drives one portrait canvas's idle-loop animation. Reuses the exact same
+// drawFighter the real match/pre-fight screens use (same sprite sheets, no
+// new art needed) rather than blowing up the flat NFT head art - `visual`
+// is a plain object matching just the fields drawFighter actually reads
+// (state/stateT/x/facing/headImg/jumpOffset), not a real Fighter, since
+// this never needs to take input or deal damage. Manually increments
+// stateT itself each frame - unlike a real match, nothing else is driving
+// this object's clock.
+function createPortraitRenderer(canvasId, playerNum, facing) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext("2d");
+  let visual = null;
+  let raf = null;
+
+  function loop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (visual) {
+      visual.stateT++;
+      drawFighter(ctx, visual, playerNum);
+    }
+    raf = requestAnimationFrame(loop);
+  }
+  raf = requestAnimationFrame(loop);
+
+  return {
+    setHead(headImg) {
+      visual = { x: 347, facing, state: "idle", stateT: 0, headImg, jumpOffset: 0 };
+    },
+    stop() {
+      if (raf) cancelAnimationFrame(raf);
+    },
+  };
+}
+
+const portraits = {
+  p1: createPortraitRenderer("p1-portrait", 1, 1),
+  p2: createPortraitRenderer("p2-portrait", 2, -1),
+};
+
+function updateReadyState() {
+  readyBtn.disabled = !(panelState.p1.selectedData && panelState.p2.selectedData);
+}
+
+async function selectFighter(side, tokenId, token) {
+  const grid = side === "p1" ? p1Grid : p2Grid;
+  for (const card of grid.querySelectorAll(".character-card")) {
+    card.classList.toggle("selected", Number(card.dataset.tokenId) === tokenId);
+  }
+  panelState[side].selectedId = tokenId;
+  const label = side === "p1" ? p1Label : p2Label;
+  const type = token.traits?.hoodie ?? "Builder";
+  label.textContent = `${token.token?.name ?? `#${tokenId}`} - ${type}`;
+
   try {
-    const [playerData, aiData] = await Promise.all([
-      loadFighterData(tokenId),
-      loadFighterData(pickRandomOpponentId(tokenId)),
-      soundReady,
-    ]);
-    playSound("uiclick");
-    await startMatch(playerData, aiData, { p2AI: true, practiceMode: practiceToggleWallet.checked });
+    const data = await loadFighterData(tokenId);
+    panelState[side].selectedData = data;
+    portraits[side].setHead(data.imageUrl);
+    updateReadyState();
+  } catch {
+    label.textContent = "Couldn't load that Hoodie - try another.";
+  }
+}
+
+async function renderPanel(side) {
+  const state = panelState[side];
+  const grid = side === "p1" ? p1Grid : p2Grid;
+  const pageIds = state.pool.slice(state.page * PANEL_PAGE_SIZE, (state.page + 1) * PANEL_PAGE_SIZE);
+
+  grid.innerHTML = `<div class="grid-loading"><div class="spinner"></div></div>`;
+
+  const tokens = await Promise.all(
+    pageIds.map(async (id) => {
+      try {
+        return await fetchToken(id);
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  grid.innerHTML = "";
+  tokens.forEach((token, i) => {
+    if (!token) return;
+    const id = pageIds[i];
+    const type = token.traits?.hoodie ?? "Builder";
+    const { dress, mouth, top, eyes } = token.traits ?? {};
+    const rareTraitCount = [dress, mouth, top, eyes].filter((t) => t?.tier === "Rare").length;
+    const info = ARCHETYPE_INFO[type];
+    const card = document.createElement("div");
+    card.className = "character-card";
+    card.dataset.tokenId = id;
+    if (state.selectedId === id) card.classList.add("selected");
+    card.innerHTML = `
+      <img src="${token.image?.svg ?? ""}" alt="${type}" />
+      <div class="card-label">${type}</div>
+      ${info ? `<div class="card-badge">${info.emoji}</div>` : ""}
+    `;
+    card.addEventListener("click", () => selectFighter(side, id, token));
+    if (info) attachBadgeTooltip(card.querySelector(".card-badge"), archetypeTooltip(type, rareTraitCount));
+    grid.appendChild(card);
+  });
+
+  renderPagination(side);
+}
+
+function renderPagination(side) {
+  const state = panelState[side];
+  const el = side === "p1" ? p1Pagination : p2Pagination;
+  const totalPages = Math.max(1, Math.ceil(state.pool.length / PANEL_PAGE_SIZE));
+  el.innerHTML = "";
+
+  const prevBtn = document.createElement("button");
+  prevBtn.textContent = "‹ PREV";
+  prevBtn.disabled = state.page <= 0;
+  prevBtn.addEventListener("click", () => {
+    state.page--;
+    renderPanel(side);
+  });
+
+  const pageLabel = document.createElement("span");
+  pageLabel.textContent = `PAGE ${state.page + 1} / ${totalPages}`;
+
+  const nextBtn = document.createElement("button");
+  nextBtn.textContent = "NEXT ›";
+  nextBtn.disabled = state.page >= totalPages - 1;
+  nextBtn.addEventListener("click", () => {
+    state.page++;
+    renderPanel(side);
+  });
+
+  el.append(prevBtn, pageLabel, nextBtn);
+}
+
+// walletTokenIds is null for free play (both sides get a random sample) or
+// the connected wallet's real Hoodies for P1 (P2 is still always a random
+// sample - see the top-of-section comment on why this stays two symmetric
+// pools instead of one shared list).
+function enterSelectScreen(walletTokenIds) {
+  document.getElementById("setup").classList.add("hidden");
+  document.querySelector("h1").classList.add("hidden");
+  selectScreen.classList.remove("hidden");
+  selectScreen.style.setProperty(
+    "--select-bg-image",
+    `url(${ARENA_BG_IMAGES[Math.floor(Math.random() * ARENA_BG_IMAGES.length)]})`,
+  );
+
+  panelState.p1 = { pool: walletTokenIds?.length ? walletTokenIds : randomTokenPool(RANDOM_POOL_SIZE), page: 0, selectedId: null, selectedData: null };
+  panelState.p2 = { pool: randomTokenPool(RANDOM_POOL_SIZE), page: 0, selectedId: null, selectedData: null };
+  p1Label.textContent = "CHOOSE YOUR FIGHTER";
+  p2Label.textContent = "CHOOSE YOUR OPPONENT";
+  updateReadyState();
+  renderPanel("p1");
+  renderPanel("p2");
+}
+
+readyBtn.addEventListener("click", async () => {
+  readyBtn.disabled = true;
+  // Must be kicked off from this click handler - browsers block audio until
+  // a real user gesture, and this is the closest one we get.
+  await initSound();
+  playSound("uiclick");
+  const data1 = panelState.p1.selectedData;
+  const data2 = panelState.p2.selectedData;
+  await startMatch(data1, data2, { p2AI: true, practiceMode: practiceToggle.checked });
+});
+
+async function startMatch(data1, data2, opts) {
+  selectScreen.classList.add("hidden");
+  document.getElementById("arena").classList.remove("hidden");
+  document.getElementById("p1-name").textContent = `${data1.name} (${data1.hoodieType})`;
+  document.getElementById("p2-name").textContent = `${data2.name} (${data2.hoodieType})`;
+  // Practice never ends on its own (see createGame's practiceMode) - this is
+  // the only way out, since the normal match-over Back/Play Again buttons
+  // are never reached.
+  document.getElementById("exit-practice-btn").classList.toggle("hidden", !opts.practiceMode);
+
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+
+  // runMatch resolves once the whole match (not just a round) is decided,
+  // with true if the vs-AI-only "Play Again" was clicked - see
+  // showMatchOverActions. Anything else (Back, or a PvP match once that
+  // exists) falls through to a full reload instead of trying to hand-reset
+  // every bit of setup-screen state (wallet connection, select-screen
+  // pools) - simpler and can't leave the UI in a half-reset state a real
+  // reload wouldn't have.
+  let playAgain = true;
+  while (playAgain) {
+    playRandomTrack();
+    playAgain = await runMatch(data1, data2, canvas, ctx, opts);
+  }
+  stopMusic();
+  location.reload();
+}
+
+startBtn.addEventListener("click", () => {
+  playSound("uiclick");
+  enterSelectScreen(null);
+});
+
+// Shared by both the manual "Connect Wallet" click and the silent
+// auto-resume path below - the only difference is whether a real user
+// gesture backs this call (unlockSound), since initSound()/an audible
+// click sound both need one and the resume path doesn't have one to spend.
+async function proceedWithWallet(address, { unlockSound }) {
+  walletStatus.textContent = "Scanning the chain for your Hoodies...";
+  const soundReady = unlockSound ? initSound() : Promise.resolve();
+
+  try {
+    const tokenIds = await fetchWalletHoodies(address);
+    await soundReady;
+    if (unlockSound) playSound("uiclick");
+
+    if (!tokenIds.length) {
+      walletStatus.textContent = "No Hoodies in this wallet yet - grab one and come back swinging.";
+      openseaBtn.classList.remove("hidden");
+      // Not everyone with a wallet wants to buy in just to try it out - this
+      // drops them straight into the same free select-screen flow as
+      // someone with no wallet at all, no NFT required.
+      freePlayBtn.classList.remove("hidden");
+      connectWalletBtn.disabled = false;
+      return;
+    }
+
+    openseaBtn.classList.add("hidden");
+    freePlayBtn.classList.add("hidden");
+    walletStatus.textContent = `${tokenIds.length} Hoodie${tokenIds.length === 1 ? "" : "s"} found - pick your fighter.`;
+    enterSelectScreen(tokenIds);
   } catch (err) {
     walletStatus.textContent = err.message;
     connectWalletBtn.disabled = false;
   }
 }
 
-// AI's own look - any Hoodie other than the player's own works fine, this
-// is purely cosmetic since the AI just plays the fighter state machine.
-function pickRandomOpponentId(excludeId) {
-  let id = excludeId;
-  while (id === excludeId) {
-    id = 1 + Math.floor(Math.random() * 5999);
+connectWalletBtn.addEventListener("click", async () => {
+  connectWalletBtn.disabled = true;
+  walletStatus.textContent = "Connecting wallet...";
+  openseaBtn.classList.add("hidden");
+  freePlayBtn.classList.add("hidden");
+
+  try {
+    const address = await connectWallet();
+    await proceedWithWallet(address, { unlockSound: true });
+  } catch (err) {
+    walletStatus.textContent = err.message;
+    connectWalletBtn.disabled = false;
   }
-  return id;
+});
+
+// eth_accounts never prompts - if this site already has permission from an
+// earlier visit/click, skip straight to "pick your fighter" instead of
+// making a returning visitor click Connect again on every reload/back-
+// navigation. unlockSound stays false here (no real gesture backs this
+// call, initSound() would just start suspended) - the character-card click
+// in renderPanel unlocks it instead, same as startBtn's own click already
+// does for local play.
+async function tryResumeWalletSession() {
+  const address = await getConnectedAccount();
+  if (!address) return;
+  connectWalletBtn.disabled = true;
+  await proceedWithWallet(address, { unlockSound: false });
 }
+
+// Drops a wallet-connected-but-no-Hoodie visitor straight into the same
+// free select-screen flow a no-wallet visitor already gets - reveals it
+// in-place rather than requiring a page reload, since local-play was only
+// hidden in the first place because a wallet got detected.
+freePlayBtn.addEventListener("click", () => {
+  playSound("uiclick");
+  enterSelectScreen(null);
+});
 
 const ROUNDS_TO_WIN = 2;
 // A drawn round (timeout tie or double-KO) replays instead of counting -
