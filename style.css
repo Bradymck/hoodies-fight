@@ -69,8 +69,6 @@ h1 {
   max-width: min(96vw, 1400px);
   margin: 0 auto;
   padding: 40px 20px;
-  background: linear-gradient(180deg, #0b0b0fcc 0%, #0b0b0f99 40%, #0b0b0fcc 100%);
-  border-radius: 4px;
 }
 
 .hype {
