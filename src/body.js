@@ -1,4 +1,9 @@
-const GROUND_Y = 300;
+// Nudged down from 300 - fighters were standing visibly above the arena
+// backgrounds' own pavement/street line instead of on it. groundBlood
+// (spawnBloodEffects, game.js) is positioned relative to this same constant,
+// so this single change moves fighters and blood down together, keeping
+// them aligned with each other.
+const GROUND_Y = 320;
 const HEAD_SIZE = 30;
 const CHARACTER_Y_OFFSET = 5;
 const CHARACTER_SCALE = 1.4;

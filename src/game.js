@@ -17,7 +17,7 @@ import {
   HEAD_POP_DURATION,
   GROUND_Y,
 } from "./body.js";
-import { MAX_POWER, SLIDE, UPPERCUT, BUILDER_SPECIAL, HODLER_SPECIAL } from "./fighter.js";
+import { MAX_POWER, SLIDE, UPPERCUT, BUILDER_SPECIAL, HODLER_SPECIAL, ARENA_MIN_X, ARENA_MAX_X } from "./fighter.js";
 import { playSound } from "./sound.js";
 import { createAIController } from "./ai.js";
 import { speakTaunt } from "./tts.js";
@@ -100,8 +100,6 @@ const SLIDE_HIT_RADIUS = 70;
 // meet without overlapping, not just an arbitrary small number. Attack
 // ranges (fighter.js) are all sized to clear this with margin.
 const MIN_FIGHTER_GAP = 68;
-const ARENA_MIN_X = 50;
-const ARENA_MAX_X = 750;
 
 // Pushes both fighters apart symmetrically whenever they'd overlap, instead
 // of each fighter unilaterally checking only its own (static) facing - that

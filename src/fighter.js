@@ -2,6 +2,23 @@ export const MOVE_SPEED = 3;
 export const MAX_HEALTH = 100;
 export const MAX_POWER = 100;
 
+// Canvas is 800 wide. `x` is a fighter's LEFT edge (see BODY_CENTER_OFFSET
+// in game.js), and the widest a drawn sprite ever gets on screen is ~125px
+// (86px raw frameSize * 1.4 CHARACTER_SCALE, the biggest of any sheet - even
+// specialLow/death's own extra scale multipliers land under that on their
+// own smaller sheets). ARENA_MAX_X used to be 750, which let the right edge
+// of the sprite land at x+125=875 - 75px past the canvas's own 800px edge,
+// clipping the fighter half off-screen. 50px margin on the left (unchanged)
+// mirrored on the right: 800 - 50 - 125 = 625. Symmetric, and the sprite
+// can never render outside the visible canvas on either side. Exported
+// (previously a local, unexported pair of duplicated-by-value constants in
+// both game.js AND here) so there's exactly one source of truth for it -
+// applyMove/knockback below and game.js's own collision/slide/uppercut
+// clamps all reference the same two numbers now instead of three separate
+// hardcoded copies that could (and did) drift out of sync.
+export const ARENA_MIN_X = 50;
+export const ARENA_MAX_X = 625;
+
 // Ranges need to clear MIN_FIGHTER_GAP (game.js) - the closest the solid-body
 // collision will ever let two fighters stand - or the attack could never
 // connect at point-blank range. Sprite bodies render ~60px wide at full
@@ -244,8 +261,8 @@ export class Fighter {
         const t = Math.min(1, this.stateT / KNOCKBACK_DURATION);
         const eased = 1 - (1 - t) * (1 - t);
         this.x = Math.max(
-          50,
-          Math.min(750, this.knockbackStartX + this.knockbackDir * this.knockbackTotal * eased),
+          ARENA_MIN_X,
+          Math.min(ARENA_MAX_X, this.knockbackStartX + this.knockbackDir * this.knockbackTotal * eased),
         );
       }
       if (this.stateT >= durations[this.state]) this.setState("idle");
@@ -336,7 +353,7 @@ export class Fighter {
     if (input.left) vx -= speed;
     if (input.right) vx += speed;
     this.x += vx;
-    this.x = Math.max(50, Math.min(750, this.x));
+    this.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, this.x));
     return vx;
   }
 
