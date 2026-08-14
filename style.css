@@ -527,6 +527,45 @@ canvas {
   text-shadow: 0 0 8px #ffe06699;
 }
 
+/* Only shown once the whole match (not just a round) is decided - a
+   drawn/mid-match round still auto-advances with no buttons at all. */
+#result-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+#result-actions button {
+  padding: 10px 22px;
+  cursor: pointer;
+  font-family: "Bungee", "Courier New", monospace;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  transition: transform 0.1s ease-out;
+}
+
+#result-actions button:hover {
+  transform: scale(1.05);
+}
+
+/* Vs-AI only - see main.js's showMatchOverActions. A live PvP opponent
+   can't be "played again" with a silent solo restart, so this stays
+   hidden entirely rather than doing something misleading. */
+#result-again {
+  background: #3ddc3d;
+  color: #0b0b0f;
+  border: none;
+  box-shadow: 0 0 0 2px #0b0b0f, 0 0 12px #3ddc3d88;
+}
+
+#result-back {
+  background: transparent;
+  color: #3ddc3d;
+  border: 2px solid #3ddc3d;
+  box-shadow: 0 0 12px #3ddc3d44;
+}
+
 .controls {
   font-size: 15px;
   color: #b8b8c2;

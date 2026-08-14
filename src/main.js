@@ -1,7 +1,7 @@
 import { loadFighterData, fetchWalletHoodies, fetchToken } from "./api.js";
 import { Fighter, ARCHETYPES, RARE_TRAIT_HEALTH_BONUS } from "./fighter.js";
 import { createGame } from "./game.js";
-import { initSound, playSound, playRandomTrack } from "./sound.js";
+import { initSound, playSound, playRandomTrack, stopMusic } from "./sound.js";
 import { pickRandomArena, drawArena, drawFighter } from "./body.js";
 import { speakTaunt } from "./tts.js";
 import { connectWallet, hasInjectedWallet } from "./wallet.js";
@@ -96,8 +96,21 @@ async function startMatch(data1, data2, opts) {
 
   const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d");
-  playRandomTrack();
-  await runMatch(data1, data2, canvas, ctx, opts);
+
+  // runMatch resolves once the whole match (not just a round) is decided,
+  // with true if the vs-AI-only "Play Again" was clicked - see
+  // showMatchOverActions. Anything else (Back, or a PvP match once that
+  // exists) falls through to a full reload instead of trying to hand-reset
+  // every bit of setup-screen state (wallet connection, character grid,
+  // free-play vs wallet-play panel) - simpler and can't leave the UI in a
+  // half-reset state a real reload wouldn't have.
+  let playAgain = true;
+  while (playAgain) {
+    playRandomTrack();
+    playAgain = await runMatch(data1, data2, canvas, ctx, opts);
+  }
+  stopMusic();
+  location.reload();
 }
 
 startBtn.addEventListener("click", async () => {
@@ -380,17 +393,55 @@ async function runMatch(data1, data2, canvas, ctx, { p2AI = false } = {}) {
       drawStreak++;
     }
 
-    // game.js already held the result on screen (winner's flex + spoken
-    // taunt) for its own linger window before resolving this promise, so
-    // there's nothing left to wait for here - just clear it and move on.
-    document.getElementById("result").classList.add("hidden");
-
     const matchWinner = wins.p1 >= ROUNDS_TO_WIN ? p1 : wins.p2 >= ROUNDS_TO_WIN ? p2 : null;
-    if (matchWinner) break;
 
-    if (winner) roundNum++;
-    // A draw replays the same round number rather than advancing it.
+    // game.js already held the round-result screen up for its own linger
+    // window before resolving this promise. For a mid-match round that's
+    // all it needs - clear it and move straight into the next round. The
+    // match-deciding round instead keeps that same screen up and adds
+    // buttons to it (see showMatchOverActions) - previously this just fell
+    // through to nothing, leaving the match frozen with no way to leave.
+    if (!matchWinner) {
+      document.getElementById("result").classList.add("hidden");
+      if (winner) roundNum++;
+      // A draw replays the same round number rather than advancing it.
+      continue;
+    }
+
+    return showMatchOverActions(p2AI);
   }
+}
+
+// Resolves once the player picks a way forward. true only for "Play
+// Again", which is only ever offered for a vs-AI match - see the comment
+// on startMatch's while loop for why a PvP "Back" doesn't try to hand-reset
+// UI state itself.
+function showMatchOverActions(p2AI) {
+  return new Promise((resolve) => {
+    const actions = document.getElementById("result-actions");
+    const againBtn = document.getElementById("result-again");
+    const backBtn = document.getElementById("result-back");
+    actions.classList.remove("hidden");
+    againBtn.classList.toggle("hidden", !p2AI);
+
+    function onAgain() {
+      cleanup();
+      resolve(true);
+    }
+    function onBack() {
+      cleanup();
+      resolve(false);
+    }
+    function cleanup() {
+      actions.classList.add("hidden");
+      document.getElementById("result").classList.add("hidden");
+      againBtn.removeEventListener("click", onAgain);
+      backBtn.removeEventListener("click", onBack);
+    }
+
+    againBtn.addEventListener("click", onAgain);
+    backBtn.addEventListener("click", onBack);
+  });
 }
 
 function resetBars() {
