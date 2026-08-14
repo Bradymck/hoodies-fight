@@ -452,10 +452,6 @@ h1 {
   image-rendering: pixelated;
 }
 
-#p2-display .portrait-frame canvas {
-  transform: scale(6.5) translate(0, 9%) scaleX(-1);
-}
-
 .fighter-label {
   margin-top: 10px;
   font-family: "Bungee", "Courier New", monospace;
