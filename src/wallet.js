@@ -59,6 +59,21 @@ export async function connectWallet() {
   return accounts[0];
 }
 
+// Checks for an already-authorized connection without prompting -
+// eth_accounts (unlike eth_requestAccounts) never shows a popup, it just
+// returns whatever accounts this site already has permission for. Used to
+// silently resume a previous session on reload/back-navigation instead of
+// making a returning visitor click "Connect Wallet" again every time.
+export async function getConnectedAccount() {
+  if (!hasInjectedWallet()) return null;
+  try {
+    const accounts = await window.ethereum.request({ method: "eth_accounts" });
+    return accounts?.[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function onAccountsChanged(callback) {
   if (!hasInjectedWallet()) return () => {};
   window.ethereum.on("accountsChanged", callback);

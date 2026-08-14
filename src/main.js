@@ -4,7 +4,7 @@ import { createGame } from "./game.js";
 import { initSound, playSound, playRandomTrack, stopMusic } from "./sound.js";
 import { pickRandomArena, drawArena, drawFighter } from "./body.js";
 import { speakTaunt } from "./tts.js";
-import { connectWallet, hasInjectedWallet } from "./wallet.js";
+import { connectWallet, hasInjectedWallet, getConnectedAccount } from "./wallet.js";
 import { initBloodCode } from "./blood-code.js";
 
 initBloodCode();
@@ -69,6 +69,7 @@ function showLocalOnly() {
 
 if (hasInjectedWallet()) {
   showWalletOnly();
+  tryResumeWalletSession();
 } else {
   // Some wallet extensions inject window.ethereum asynchronously, slightly
   // after this script runs - a single synchronous check at load time can
@@ -80,8 +81,12 @@ if (hasInjectedWallet()) {
   const onInit = () => {
     if (decided) return;
     decided = true;
-    if (hasInjectedWallet()) showWalletOnly();
-    else showLocalOnly();
+    if (hasInjectedWallet()) {
+      showWalletOnly();
+      tryResumeWalletSession();
+    } else {
+      showLocalOnly();
+    }
   };
   window.addEventListener("ethereum#initialized", onInit, { once: true });
   setTimeout(onInit, 300);
@@ -140,19 +145,18 @@ startBtn.addEventListener("click", async () => {
   }
 });
 
-connectWalletBtn.addEventListener("click", async () => {
-  connectWalletBtn.disabled = true;
-  walletStatus.textContent = "Connecting wallet...";
-  openseaBtn.classList.add("hidden");
-  freePlayBtn.classList.add("hidden");
-  const soundReady = initSound();
+// Shared by both the manual "Connect Wallet" click and the silent
+// auto-resume path below - the only difference is whether a real user
+// gesture backs this call (unlockSound), since initSound()/an audible
+// click sound both need one and the resume path doesn't have one to spend.
+async function proceedWithWallet(address, { unlockSound }) {
+  walletStatus.textContent = "Scanning the chain for your Hoodies...";
+  const soundReady = unlockSound ? initSound() : Promise.resolve();
 
   try {
-    const address = await connectWallet();
-    walletStatus.textContent = "Scanning the chain for your Hoodies...";
     const tokenIds = await fetchWalletHoodies(address);
     await soundReady;
-    playSound("uiclick");
+    if (unlockSound) playSound("uiclick");
 
     if (!tokenIds.length) {
       walletStatus.textContent = "No Hoodies in this wallet yet - grab one and come back swinging.";
@@ -173,7 +177,36 @@ connectWalletBtn.addEventListener("click", async () => {
     walletStatus.textContent = err.message;
     connectWalletBtn.disabled = false;
   }
+}
+
+connectWalletBtn.addEventListener("click", async () => {
+  connectWalletBtn.disabled = true;
+  walletStatus.textContent = "Connecting wallet...";
+  openseaBtn.classList.add("hidden");
+  freePlayBtn.classList.add("hidden");
+
+  try {
+    const address = await connectWallet();
+    await proceedWithWallet(address, { unlockSound: true });
+  } catch (err) {
+    walletStatus.textContent = err.message;
+    connectWalletBtn.disabled = false;
+  }
 });
+
+// eth_accounts never prompts - if this site already has permission from an
+// earlier visit/click, skip straight to "pick your fighter" instead of
+// making a returning visitor click Connect again on every reload/back-
+// navigation. unlockSound stays false here (no real gesture backs this
+// call, initSound() would just start suspended) - the character-card click
+// in renderCharacterGrid unlocks it instead, same as startBtn's own click
+// already does for local play.
+async function tryResumeWalletSession() {
+  const address = await getConnectedAccount();
+  if (!address) return;
+  connectWalletBtn.disabled = true;
+  await proceedWithWallet(address, { unlockSound: false });
+}
 
 // Drops a wallet-connected-but-no-Hoodie visitor straight into the same
 // free local-play form a no-wallet visitor already gets - reveals it
@@ -302,10 +335,16 @@ function attachBadgeTooltip(badge, text) {
 async function pickFighter(tokenId) {
   characterSelect.classList.add("hidden");
   walletStatus.textContent = "Suiting up...";
+  // Normally a no-op - connectWalletBtn's click already unlocked sound. On
+  // the silent auto-resume path (tryResumeWalletSession) nothing did yet,
+  // since that path has no real user gesture of its own to spend - this
+  // click is the first one, so it's the one that has to do it.
+  const soundReady = initSound();
   try {
     const [playerData, aiData] = await Promise.all([
       loadFighterData(tokenId),
       loadFighterData(pickRandomOpponentId(tokenId)),
+      soundReady,
     ]);
     playSound("uiclick");
     await startMatch(playerData, aiData, { p2AI: true });
