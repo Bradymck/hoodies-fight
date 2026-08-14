@@ -720,10 +720,10 @@ async function runCountdown(tauntsSpoken) {
 // (Vercel's buildCommand, see vercel.json) with the exact commit Vercel is
 // serving - lets a visitor click straight through to the real source
 // instead of taking "it's open source" on faith. 404s on local dev (no
-// Vercel build ran) - that's expected, so the footer just stays empty
-// rather than showing a broken or fake link.
-async function showBuildFooter() {
-  const el = document.getElementById("build-footer");
+// Vercel build ran) - that's expected, so this just stays empty rather
+// than showing a broken or fake link.
+async function showIntegrityCheck() {
+  const el = document.getElementById("integrity-check");
   if (!el) return;
   try {
     const res = await fetch("version.json", { cache: "no-store" });
@@ -731,9 +731,15 @@ async function showBuildFooter() {
     const { commit, repo } = await res.json();
     if (!commit || !repo) return;
     const short = commit.slice(0, 7);
-    el.innerHTML = `Running <a href="https://github.com/${repo}/commit/${commit}" target="_blank" rel="noopener noreferrer">commit ${short}</a> - verify this matches <a href="https://github.com/${repo}" target="_blank" rel="noopener noreferrer">the source on GitHub</a>`;
+    // Can't link the *exact* attestation record for this build - its ID is
+    // only assigned once actions/attest-build-provenance runs in CI, which
+    // happens after this very file (part of the attested artifact) is
+    // already built - a chicken-and-egg problem. Linking the repo's
+    // attestations list instead; a visitor can cross-reference it against
+    // the commit shown right here.
+    el.innerHTML = `&#10003; Build verified &mdash; <a href="https://github.com/${repo}/commit/${commit}" target="_blank" rel="noopener noreferrer">commit ${short}</a> &middot; <a href="https://github.com/${repo}/attestations" target="_blank" rel="noopener noreferrer">Sigstore attestation</a>`;
   } catch {
-    // No network, or not a Vercel deploy - leave the footer empty.
+    // No network, or not a Vercel deploy - leave it empty.
   }
 }
-showBuildFooter();
+showIntegrityCheck();

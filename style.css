@@ -854,20 +854,69 @@ canvas {
   margin-top: 10px;
 }
 
-#build-footer {
-  font-size: 12px;
-  color: #9a9aa4;
-  margin: 24px 0 8px;
+#integrity-check {
+  margin: 14px 0 0;
+  font-size: 14px;
   letter-spacing: 0.03em;
+  color: #c8c8d2;
+  text-shadow: 0 0 6px #3ddc3d33;
 }
 
-#build-footer a {
+#integrity-check a {
   color: #3ddc3d;
   text-decoration: underline;
+  text-shadow: 0 0 6px #3ddc3d66;
 }
 
-#build-footer:empty {
+/* Empty until version.json resolves (or forever, on local dev where no
+   Vercel build ran) - collapses instead of leaving a blank gap under the
+   button. */
+#integrity-check:empty {
   display: none;
+}
+
+#site-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 28px;
+  margin: 32px 0 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.social-link {
+  display: inline-flex;
+  transition: transform 0.15s ease-out;
+}
+
+.social-link svg {
+  width: 26px;
+  height: 26px;
+  fill: #9a9aa4;
+  transition: fill 0.15s ease-out, filter 0.15s ease-out;
+}
+
+.social-link:hover {
+  transform: scale(1.12);
+}
+
+/* Each brand glows its own color on hover rather than the site's usual
+   green - the whole point is these read as X/GitHub/OpenSea at a glance,
+   not as three more green buttons. */
+.x-link:hover svg {
+  fill: #e8e8ea;
+  filter: drop-shadow(0 0 8px #1d9bf0cc) drop-shadow(0 0 16px #1d9bf066);
+}
+
+.github-link:hover svg {
+  fill: #e8e8ea;
+  filter: drop-shadow(0 0 8px #a371f7cc) drop-shadow(0 0 16px #a371f766);
+}
+
+.opensea-link:hover svg {
+  fill: #2081e2;
+  filter: drop-shadow(0 0 8px #2081e2cc) drop-shadow(0 0 16px #2081e266);
 }
 
 #cheat-toast {
