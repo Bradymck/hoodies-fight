@@ -828,6 +828,11 @@ canvas {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Without this it inherits body's global text-align:center, floating in
+     the middle of the (wide) bars-col instead of hugging the PFP beside it
+     - .fighter-hud-flip below overrides this to right for P2's mirrored
+     side, but P1's own left alignment still has to be stated explicitly. */
+  text-align: left;
 }
 
 .fighter-hud-flip .fighter-name {
