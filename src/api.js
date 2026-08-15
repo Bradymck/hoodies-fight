@@ -204,6 +204,12 @@ export async function loadFighterData(tokenId) {
     hoodieType: hoodie,
     rareTraitCount,
     imageUrl,
+    // The original, unmodified token art - NOT the background-stripped/
+    // head-shape-cropped imageUrl above (that's built for compositing a
+    // floating head onto the body sprite, not for standing alone). The HUD
+    // PFP just wants the real image circle-cropped via CSS, background and
+    // all, like any normal avatar.
+    avatarUrl: token.image.svg,
     taunt: talk,
     talkHistory,
   };

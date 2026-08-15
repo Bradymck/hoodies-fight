@@ -490,8 +490,8 @@ async function startMatch(data1, data2, opts) {
   fitArenaCanvas();
   document.getElementById("p1-name").textContent = `${data1.name} (${data1.hoodieType})`;
   document.getElementById("p2-name").textContent = `${data2.name} (${data2.hoodieType})`;
-  document.getElementById("p1-pfp").src = data1.imageUrl;
-  document.getElementById("p2-pfp").src = data2.imageUrl;
+  document.getElementById("p1-pfp").src = data1.avatarUrl;
+  document.getElementById("p2-pfp").src = data2.avatarUrl;
   // Universal for any match, not just practice - a normal AI match had no
   // way to bail early either before this existed, only a post-match Back
   // to Menu button.
