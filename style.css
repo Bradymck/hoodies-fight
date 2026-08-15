@@ -733,21 +733,18 @@ h1 {
   overflow: hidden;
 }
 
-/* Purely a centering stage for #canvas-wrap - fills whatever space #arena
-   has, #canvas-wrap itself gets an exact pixel size from fitArenaCanvas()
-   in main.js (the same measure-and-fit approach the character-select
-   screen's portraits already use) and stays centered inside it.
-   margin-top reserves a clear strip for the fixed corner buttons
-   (#exit-match-btn, #wallet-chip) - without it, a tall/narrow viewport lets
-   the canvas (and its overlaid HUD) reach right up to the top edge, right
-   behind them. fitArenaCanvas measures this element's own clientHeight
-   (margin isn't part of that), so the reserved space comes out of the
-   canvas's fit automatically - no extra math needed there. */
+/* Purely a centering stage for #canvas-wrap - fills the entirety of #arena
+   (no reserved margin - the background art stays full-bleed, edge to edge,
+   not letterboxed behind a strip for the corner buttons). #canvas-wrap
+   itself gets an exact pixel size from fitArenaCanvas() in main.js (the
+   same measure-and-fit approach the character-select screen's portraits
+   already use) and stays centered inside it. Clearance for the corner
+   buttons is handled by pushing the HUD itself down instead (see .hud) -
+   the buttons float over the game art on their own translucent backing. */
 #canvas-stage {
   flex: 1;
   min-height: 0;
   width: 100%;
-  margin-top: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -776,9 +773,13 @@ canvas {
    of height to make room for them. Percent-based insets (not px) so they
    scale together with the canvas at any screen size, same convention
    .taunt/#countdown/#result already use below. */
+/* top is a fixed px, not a percentage - #exit-match-btn/#wallet-chip are
+   also fixed px (12px inset, ~34px tall), so a matching fixed offset here
+   reliably clears them at any canvas size. A percentage would shrink right
+   along with a small canvas and could creep back up behind the buttons. */
 .hud {
   position: absolute;
-  top: 4%;
+  top: 56px;
   left: 2.5%;
   right: 2.5%;
   display: flex;
@@ -840,7 +841,7 @@ canvas {
 
 .names {
   position: absolute;
-  top: calc(4% + 40px);
+  top: 96px;
   left: 2.5%;
   right: 2.5%;
   z-index: 2;
