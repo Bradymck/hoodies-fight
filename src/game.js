@@ -697,20 +697,26 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     roundWinner = winner;
     resultTimer = RESULT_DISPLAY_FRAMES;
     const titleEl = document.getElementById("result-title");
-    const quoteEl = document.getElementById("result-quote");
     if (winner) {
       winner.setState("flex");
       const quote = pickVictoryQuote(winner);
       const label = winner === p1 ? "PLAYER ONE" : "PLAYER TWO";
       titleEl.textContent = `${label} WINS!`;
-      quoteEl.textContent = quote ? `"${quote}"` : "";
+      // Reuses the same pre-fight taunt bubble (already positioned above
+      // this fighter's own head, already hidden again by the time a round
+      // ends) instead of a floating line of glow text - a real opaque
+      // speech bubble stays readable over any arena background.
+      if (quote) {
+        const bubbleEl = document.getElementById(winner === p1 ? "taunt-p1" : "taunt-p2");
+        bubbleEl.textContent = `"${quote}"`;
+        bubbleEl.classList.remove("hidden");
+      }
       speakTaunt(quote);
       const loser = winner === p1 ? p2 : p1;
       reportMatchResult(winner.data.tokenId, loser.data.tokenId, "win");
       reportMatchResult(loser.data.tokenId, winner.data.tokenId, "loss");
     } else {
       titleEl.textContent = "DRAW";
-      quoteEl.textContent = "";
     }
     document.getElementById("result").classList.remove("hidden");
   }

@@ -998,23 +998,24 @@ canvas {
   text-align: center;
 }
 
+/* A colored glow alone (the old text-shadow here) does nothing for
+   contrast against a bright/busy arena background - it's the same hue as
+   the text, so on something like a cream-colored neon sign it nearly
+   vanishes (see the screenshot that prompted this). -webkit-text-stroke
+   adds a real dark outline around the glyphs themselves - unlike faking one
+   with offset text-shadows, it stays crisp and even at any size - and the
+   added drop-shadow gives it a hard dark edge for depth on top of that.
+   The glow stays layered on for style, it's just no longer the only thing
+   standing between this text and the background. */
 #result-title {
   font-family: "Bungee", "Courier New", monospace;
   font-size: clamp(28px, 5vw, 48px);
   font-weight: bold;
   letter-spacing: 0.06em;
   color: #ffe066;
-  text-shadow: 0 0 12px #ffe066cc, 0 0 30px #ffe06666;
-}
-
-#result-quote {
-  font-size: 16px;
-  font-style: italic;
-  color: #ffe066;
-  opacity: 0.8;
-  margin-top: 6px;
-  letter-spacing: normal;
-  text-shadow: 0 0 8px #ffe06699;
+  -webkit-text-stroke: 3px #0b0b0f;
+  paint-order: stroke fill;
+  text-shadow: 0 0 12px #ffe066cc, 0 0 30px #ffe06666, 0 4px 8px #000c;
 }
 
 /* Only shown once the whole match (not just a round) is decided - a

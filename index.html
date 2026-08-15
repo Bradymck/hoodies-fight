@@ -121,12 +121,14 @@
              sat centered between the bars before, which put it in the same
              cramped strip as everything else at the top of the screen. -->
         <div id="timer">60</div>
+        <!-- Reused for the post-round victory quote too (game.js's endRound) -
+             a real opaque speech bubble above the winner's own head stays
+             readable over any arena background, unlike floating glow text. -->
         <div id="taunt-p1" class="taunt hidden"></div>
         <div id="taunt-p2" class="taunt hidden"></div>
         <div id="countdown" class="hidden"></div>
         <div id="result" class="hidden">
           <div id="result-title"></div>
-          <div id="result-quote"></div>
           <div id="result-actions" class="hidden">
             <button id="result-again" class="hidden">PLAY AGAIN</button>
             <button id="result-back">BACK TO MENU</button>
