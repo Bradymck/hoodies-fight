@@ -31,7 +31,7 @@ const freePlayBtn = document.getElementById("free-play-btn");
 const hypeEl = document.getElementById("hype");
 const practiceToggle = document.getElementById("practice-toggle");
 const readyBtn = document.getElementById("ready-btn");
-const exitPracticeBtn = document.getElementById("exit-practice-btn");
+const exitMatchBtn = document.getElementById("exit-match-btn");
 const walletChip = document.getElementById("wallet-chip");
 const walletChipAddress = document.getElementById("wallet-chip-address");
 const disconnectBtn = document.getElementById("disconnect-btn");
@@ -55,7 +55,7 @@ disconnectBtn.addEventListener("click", async () => {
   await disconnectWallet();
   // Simplest full reset back to the setup screen's initial state - same
   // "give up on hand-resetting every bit of state" call runMatch/
-  // exitPracticeBtn already make elsewhere in this file.
+  // exitMatchBtn already make elsewhere in this file.
   location.reload();
 });
 
@@ -104,9 +104,11 @@ document.addEventListener("click", (e) => {
 
 // Reload is the same "give up on trying to hand-reset every bit of setup
 // state" call as the normal Back to Menu button (see runMatch/
-// showMatchOverActions) - practice just reaches it a different way, since
-// a practice match never ends on its own to get there through that flow.
-exitPracticeBtn.addEventListener("click", () => {
+// showMatchOverActions) - a universal bail-out for any match in progress
+// (not just practice, which otherwise has no other way out at all since it
+// never ends on its own - see createGame's practiceMode), so a visitor
+// isn't stuck closing the tab to quit early.
+exitMatchBtn.addEventListener("click", () => {
   stopMusic();
   location.reload();
 });
@@ -488,10 +490,10 @@ async function startMatch(data1, data2, opts) {
   fitArenaCanvas();
   document.getElementById("p1-name").textContent = `${data1.name} (${data1.hoodieType})`;
   document.getElementById("p2-name").textContent = `${data2.name} (${data2.hoodieType})`;
-  // Practice never ends on its own (see createGame's practiceMode) - this is
-  // the only way out, since the normal match-over Back/Play Again buttons
-  // are never reached.
-  document.getElementById("exit-practice-btn").classList.toggle("hidden", !opts.practiceMode);
+  // Universal for any match, not just practice - a normal AI match had no
+  // way to bail early either before this existed, only a post-match Back
+  // to Menu button.
+  exitMatchBtn.classList.remove("hidden");
 
   const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d");

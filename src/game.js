@@ -798,7 +798,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       if (flash < 0.02) flash = 0;
     }
 
-    // Practice never ends on its own - see exit-practice-btn (main.js) for
+    // Practice never ends on its own - see exit-match-btn (main.js) for
     // the only way out, since none of the normal win conditions apply to a
     // dummy that can neither be finished off nor time one out.
     if (!practiceMode) {
