@@ -875,14 +875,22 @@ canvas {
 
 /* P1's fill stays right-anchored in its own track (drains toward center as
    it empties) while P2's default left-anchor drains the opposite way -
-   both bars close in toward the middle timer as the fight goes on. */
+   both bars close in toward the middle as the fight goes on. */
 #p1-health,
 #p1-power {
   margin-left: auto;
 }
 
+/* Below the round-info line (see .names), not inline with the bars - was
+   centered between them at bar-height, which crammed it into the same
+   cramped strip as everything else at the top of the screen. Absolute
+   instead of a flex child now, so it needs its own centering. */
 #timer {
-  width: 60px;
+  position: absolute;
+  top: 150px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
   font-family: "Bungee", "Courier New", monospace;
   font-size: 30px;
   color: #ffe066;
@@ -974,9 +982,15 @@ canvas {
   animation: pop-in 0.25s ease-out;
 }
 
+/* Was top:12% - right in the same cramped strip as the HUD (bars/round-
+   info/timer all live in the top ~160px). Centered lower instead, just
+   above the fighters' own head height (GROUND_Y minus their standing
+   height lands heads around ~58% down the canvas) so the win title/quote/
+   buttons read as their own clearly-separated group instead of stacking on
+   top of the HUD or the characters themselves. */
 #result {
   position: absolute;
-  top: 12%;
+  top: 40%;
   left: 50%;
   transform: translate(-50%, -50%);
   animation: pop-in 0.3s ease-out;
