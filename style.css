@@ -1013,7 +1013,13 @@ canvas {
   font-weight: bold;
   letter-spacing: 0.06em;
   color: #ffe066;
-  -webkit-text-stroke: 3px #0b0b0f;
+  /* -webkit-text-stroke is centered ON the glyph edge - paint-order below
+     puts the fill on top, which covers the INNER half of the stroke,
+     leaving only the outer half visible as a ring. 3px read as barely
+     there once cut in half; 9px gives a genuinely bold ~4-5px black
+     cartoon-style outline instead of a faint dark fuzz. Pure #000 (not the
+     site's usual near-black #0b0b0f) for the hardest possible edge. */
+  -webkit-text-stroke: 9px #000;
   paint-order: stroke fill;
   text-shadow: 0 0 12px #ffe066cc, 0 0 30px #ffe06666, 0 4px 8px #000c;
 }
