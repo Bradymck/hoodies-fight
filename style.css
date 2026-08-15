@@ -767,19 +767,17 @@ canvas {
   display: block;
 }
 
-/* Fighting-game standard: health/power bars and names sit directly on top
-   of the game view instead of in their own strip above it - lets the
-   canvas actually use the full screen instead of giving up a fixed slice
-   of height to make room for them. Percent-based insets (not px) so they
-   scale together with the canvas at any screen size, same convention
-   .taunt/#countdown/#result already use below. */
-/* top is a fixed px, not a percentage - #exit-match-btn/#wallet-chip are
-   also fixed px (12px inset, ~34px tall), so a matching fixed offset here
-   reliably clears them at any canvas size. A percentage would shrink right
-   along with a small canvas and could creep back up behind the buttons. */
+/* Fighting-game standard: the HUD sits directly on top of the game view
+   instead of in its own strip above it - lets the canvas actually use the
+   full screen instead of giving up a fixed slice of height to make room
+   for it. top is a fixed px, not a percentage - #exit-match-btn/
+   #wallet-chip are also fixed px (12px inset, ~34px tall), so a matching
+   fixed offset here reliably clears them at any canvas size (a percentage
+   would shrink right along with a small canvas and could creep back up
+   behind the buttons). */
 .hud {
   position: absolute;
-  top: 56px;
+  top: 64px;
   left: 2.5%;
   right: 2.5%;
   display: flex;
@@ -788,23 +786,67 @@ canvas {
   z-index: 2;
 }
 
-.bars {
+/* One PFP-plus-bars group per fighter (MK/Injustice style) instead of a
+   bare pair of bars with the name floating in an unrelated row below it -
+   the name now reads unambiguously as belonging to the portrait/bars right
+   beside it. p2's markup order is already pfp-last in HTML (mirrors p1's
+   pfp-first) rather than flipped with CSS, so both read the same
+   left-to-right regardless of which side they're on. */
+.fighter-hud {
   flex: 1;
+  min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  gap: 10px;
 }
 
+.pfp {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #1b1330;
+  border: 2px solid #3ddc3d;
+  box-shadow: 0 0 8px #3ddc3d88, inset 0 0 6px #000a;
+}
+
+.bars-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fighter-name {
+  font-family: "Bungee", "Courier New", monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: #fff;
+  text-shadow: 0 1px 3px #000, 0 0 8px #3ddc3d99;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fighter-hud-flip .fighter-name {
+  text-align: right;
+}
+
+/* Slightly smaller than before (22px/11px) - the PFP+name addition needs
+   the room, and the tighter bars read cleaner stacked under a name label
+   than the old bare full-height pair did. */
 .healthbar,
 .powerbar {
-  height: 22px;
+  height: 18px;
   background: #161620;
   border: 2px solid #555;
   box-shadow: inset 0 0 0 1px #000, 0 1px 4px #000c;
 }
 
 .powerbar {
-  height: 11px;
+  height: 9px;
 }
 
 .health-fill {
@@ -826,6 +868,9 @@ canvas {
   box-shadow: 0 0 8px #ffd700, 0 0 16px #ffd700aa;
 }
 
+/* P1's fill stays right-anchored in its own track (drains toward center as
+   it empties) while P2's default left-anchor drains the opposite way -
+   both bars close in toward the middle timer as the fight goes on. */
 #p1-health,
 #p1-power {
   margin-left: auto;
@@ -839,26 +884,24 @@ canvas {
   text-shadow: 0 0 6px #ffe06699, 0 2px 4px #000c;
 }
 
+/* Just the round counter now that each fighter's name lives in its own
+   .fighter-hud group above - top sits below the taller PFP+name+bars
+   stack .hud grew into. */
 .names {
   position: absolute;
-  top: 96px;
+  top: 122px;
   left: 2.5%;
   right: 2.5%;
   z-index: 2;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 2px 8px;
-  font-size: 16px;
-  letter-spacing: 0.05em;
-  text-shadow: 0 1px 3px #000, 0 2px 8px #000c;
+  justify-content: center;
 }
 
 #round-info {
   font-size: 14px;
   color: #ffe066;
   letter-spacing: 0.1em;
+  text-shadow: 0 1px 3px #000, 0 2px 8px #000c;
 }
 
 /* Shown for the whole time any match (not just practice) is running -

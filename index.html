@@ -87,26 +87,36 @@
     <div id="canvas-stage">
       <div id="canvas-wrap">
         <canvas id="canvas" width="800" height="360"></canvas>
-        <!-- Overlaid directly on the game view (health/power bars up top,
-             names just below) rather than sitting in their own strip above
-             the canvas - standard fighting-game HUD placement, and it means
-             the canvas itself can actually use the full screen instead of
-             giving up a fixed slice of height to make room above it. -->
+        <!-- Overlaid directly on the game view rather than sitting in its
+             own strip above the canvas - standard fighting-game HUD
+             placement, and it means the canvas itself can actually use the
+             full screen instead of giving up a fixed slice of height to
+             make room above it. Each side is its own PFP + name-over-bars
+             group (MK/Injustice style) instead of a bare pair of bars with
+             the name floating in an unrelated row below - the name now
+             reads unambiguously as belonging to the fighter right beside
+             it, and the circular portrait gives an instant visual anchor. -->
         <div class="hud">
-          <div class="bars">
-            <div class="healthbar"><div id="p1-health" class="health-fill"></div></div>
-            <div class="powerbar"><div id="p1-power" class="power-fill"></div></div>
+          <div class="fighter-hud" id="p1-hud">
+            <img class="pfp" id="p1-pfp" alt="" />
+            <div class="bars-col">
+              <div class="fighter-name" id="p1-name"></div>
+              <div class="healthbar"><div id="p1-health" class="health-fill"></div></div>
+              <div class="powerbar"><div id="p1-power" class="power-fill"></div></div>
+            </div>
           </div>
           <div id="timer">60</div>
-          <div class="bars">
-            <div class="healthbar"><div id="p2-health" class="health-fill"></div></div>
-            <div class="powerbar"><div id="p2-power" class="power-fill"></div></div>
+          <div class="fighter-hud fighter-hud-flip" id="p2-hud">
+            <div class="bars-col">
+              <div class="fighter-name" id="p2-name"></div>
+              <div class="healthbar"><div id="p2-health" class="health-fill"></div></div>
+              <div class="powerbar"><div id="p2-power" class="power-fill"></div></div>
+            </div>
+            <img class="pfp" id="p2-pfp" alt="" />
           </div>
         </div>
         <div class="names">
-          <span id="p1-name"></span>
           <span id="round-info">ROUND 1 &middot; 0 - 0</span>
-          <span id="p2-name"></span>
         </div>
         <div id="taunt-p1" class="taunt hidden"></div>
         <div id="taunt-p2" class="taunt hidden"></div>
