@@ -11,9 +11,11 @@ import {
   drawSurgeBlast,
   drawRatRush,
   drawEnergyBurst,
+  drawHitSpark,
   BLOOD_SPATTER_TOTAL_FRAMES,
   SURGE_BLAST_TOTAL_FRAMES,
   ENERGY_BURST_TOTAL_FRAMES,
+  HIT_SPARK_TOTAL_FRAMES,
   HEAD_POP_DURATION,
   GROUND_Y,
 } from "./body.js";
@@ -60,6 +62,10 @@ const FLASH_ON_HIT = 0.25;
 const RESULT_DISPLAY_FRAMES = 170;
 const SPATTER_TICKS_PER_FRAME = 3;
 const IMPACT_TICKS_PER_FRAME = 3;
+// Only 2 source frames (a sharp flash, not a lingering burst) - held longer
+// per tick than the 5-frame energy burst above so it still reads as a
+// visible flash instead of blinking past in 2 frames flat.
+const HIT_SPARK_TICKS_PER_FRAME = 5;
 const MAX_GROUND_BLOOD = 90;
 // Mid-air splats (splatExtras) vanish almost immediately rather than
 // sticking around - unlike groundBlood, which is meant to pool and stay.
@@ -196,6 +202,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   const headPops = [];
   const projectiles = [];
   const impacts = [];
+  const hitSparks = [];
 
   // Rough head height rather than a per-frame anchor lookup - matches the
   // same level-of-precision the blood-spatter positioning already uses.
@@ -214,31 +221,9 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   // inside that fighter's own silhouette instead of at their actual body.
   const BODY_CENTER_OFFSET = 53;
 
-  function spawnBloodEffects(defender, attacker) {
-    // Hidden by default, Mortal Kombat-style - see blood-code.js for the
-    // secret sequence that unlocks it.
-    if (!isBloodUnlocked()) return;
+  function spawnHitEffects(defender, attacker) {
     const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
     const attackerCenterX = attacker.x + BODY_CENTER_OFFSET;
-
-    // Ground spots spray wide around the contact point instead of a tight
-    // cluster right under their feet - several per hit, reads as a real
-    // messy scatter. Nudged down from GROUND_Y - now that there's no
-    // platform texture (removed - the backgrounds have their own painted
-    // ground), spots centered right at GROUND_Y read as too high, landing
-    // behind/on the character instead of clearly on the ground in front of
-    // and below them.
-    const spotCount = 4 + Math.floor(Math.random() * 4);
-    for (let i = 0; i < spotCount; i++) {
-      groundBlood.push({
-        imgIndex: pickBloodSpotVariant(),
-        x: defenderCenterX + (Math.random() - 0.5) * 160,
-        y: GROUND_Y + 8 + Math.random() * 28,
-        size: 14 + Math.random() * 20,
-        rotation: Math.random() * Math.PI * 2,
-      });
-    }
-    while (groundBlood.length > MAX_GROUND_BLOOD) groundBlood.shift();
 
     // Anchored between the two fighters' actual visual centers, offset
     // toward wherever the attacker actually is - NOT the defender's own
@@ -268,6 +253,36 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
             ? GROUND_Y - 90
             : GROUND_Y - 50;
     const contactX = defenderCenterX + towardAttacker * (gapX * 0.4);
+
+    // Always-on melee impact flash, independent of the blood setting below -
+    // punch/kick/slide/uppercut had NO hit feedback at all with blood off
+    // before this (this whole function used to bail out first thing unless
+    // blood was unlocked), so a landed hit read as silently absorbed even
+    // though damage really did register. See drawHitSpark in body.js.
+    hitSparks.push({ x: contactX, y: contactHeight, t: 0 });
+
+    // Everything below is blood - hidden by default, Mortal Kombat-style -
+    // see blood-code.js for the secret sequence that unlocks it.
+    if (!isBloodUnlocked()) return;
+
+    // Ground spots spray wide around the contact point instead of a tight
+    // cluster right under their feet - several per hit, reads as a real
+    // messy scatter. Nudged down from GROUND_Y - now that there's no
+    // platform texture (removed - the backgrounds have their own painted
+    // ground), spots centered right at GROUND_Y read as too high, landing
+    // behind/on the character instead of clearly on the ground in front of
+    // and below them.
+    const spotCount = 4 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < spotCount; i++) {
+      groundBlood.push({
+        imgIndex: pickBloodSpotVariant(),
+        x: defenderCenterX + (Math.random() - 0.5) * 160,
+        y: GROUND_Y + 8 + Math.random() * 28,
+        size: 14 + Math.random() * 20,
+        rotation: Math.random() * Math.PI * 2,
+      });
+    }
+    while (groundBlood.length > MAX_GROUND_BLOOD) groundBlood.shift();
 
     // A static splat layered behind the animated burst first, for extra
     // density - fully randomized position/rotation/scale each time so
@@ -313,10 +328,10 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   }
 
   // Impact/hit-point FX - static splats, the animated spatter burst, energy
-  // bursts, and the KO head-pop, all layered in front of both fighters (an
-  // impact flash should read clearly at the moment of the hit, unlike
-  // groundBlood's floor-level pooling). Ages/fades each on every call, so
-  // this must only be called once per rendered frame.
+  // bursts, hit sparks, and the KO head-pop, all layered in front of both
+  // fighters (an impact flash should read clearly at the moment of the hit,
+  // unlike groundBlood's floor-level pooling). Ages/fades each on every
+  // call, so this must only be called once per rendered frame.
   function drawBloodFX() {
     for (let i = splatExtras.length - 1; i >= 0; i--) {
       const s = splatExtras[i];
@@ -352,6 +367,16 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       drawEnergyBurst(ctx, im.x, im.y, spriteFrame);
       im.t++;
     }
+    for (let i = hitSparks.length - 1; i >= 0; i--) {
+      const hs = hitSparks[i];
+      const spriteFrame = Math.floor(hs.t / HIT_SPARK_TICKS_PER_FRAME);
+      if (spriteFrame >= HIT_SPARK_TOTAL_FRAMES) {
+        hitSparks.splice(i, 1);
+        continue;
+      }
+      drawHitSpark(ctx, hs.x, hs.y, spriteFrame);
+      hs.t++;
+    }
     for (let i = headPops.length - 1; i >= 0; i--) {
       const p = headPops[i];
       if (p.t >= HEAD_POP_DURATION) {
@@ -382,7 +407,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       attacker.lastEvent = `${attacker.state}-hit`;
       shake = Math.max(shake, SHAKE_ON_HIT);
       flash = Math.max(flash, FLASH_ON_HIT);
-      if (!wasBlocking) spawnBloodEffects(defender, attacker);
+      if (!wasBlocking) spawnHitEffects(defender, attacker);
     }
   }
 
@@ -427,7 +452,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     attacker.lastEvent = "slide-hit";
     shake = Math.max(shake, SHAKE_ON_HIT);
     flash = Math.max(flash, FLASH_ON_HIT);
-    spawnBloodEffects(defender, attacker);
+    spawnHitEffects(defender, attacker);
   }
 
   // Anti-air counter - deliberately does NOT exclude a jumping defender
@@ -460,7 +485,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     attacker.lastEvent = "uppercut-hit";
     shake = Math.max(shake, SHAKE_ON_HIT);
     flash = Math.max(flash, FLASH_ON_HIT);
-    spawnBloodEffects(defender, attacker);
+    spawnHitEffects(defender, attacker);
   }
 
   // Fires the instant the shared cast animation completes (fighter.js sets
@@ -518,11 +543,11 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
           // Anchored at the projectile's actual position (the real contact
           // point), not the caster's - the caster may be standing far away
           // by the time this lands, so their own x would be the wrong place
-          // to burst blood. spawnBloodEffects just needs something with an
+          // to burst blood. spawnHitEffects just needs something with an
           // .x/.state shape; this fakes a minimal "attacker" positioned
           // exactly where the hit happened - "slide" for the rat rush so the
           // blood lands at ground height instead of the bolt's head height.
-          spawnBloodEffects(target, { x: p.x - BODY_CENTER_OFFSET, state: isRatRush ? "slide" : "special" });
+          spawnHitEffects(target, { x: p.x - BODY_CENTER_OFFSET, state: isRatRush ? "slide" : "special" });
           impacts.push({ x: p.x, y: isRatRush ? GROUND_Y - 20 : p.y, t: 0 });
           projectiles.splice(i, 1);
           continue;
@@ -557,7 +582,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     attacker.lastEvent = "special-hit";
     shake = Math.max(shake, SHAKE_ON_SPECIAL);
     flash = Math.max(flash, FLASH_ON_HIT);
-    spawnBloodEffects(defender, { x: attacker.x, state: "uppercut" });
+    spawnHitEffects(defender, { x: attacker.x, state: "uppercut" });
   }
 
   // Hodler's special - a close ground sweep with its own dedicated
@@ -581,7 +606,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     attacker.lastEvent = "special-hit";
     shake = Math.max(shake, SHAKE_ON_SPECIAL);
     flash = Math.max(flash, FLASH_ON_HIT);
-    spawnBloodEffects(defender, { x: attacker.x, state: "kick" });
+    spawnHitEffects(defender, { x: attacker.x, state: "kick" });
   }
 
   function handleSounds(fighter) {

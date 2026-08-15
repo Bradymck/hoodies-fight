@@ -23,7 +23,13 @@ export const ARENA_MAX_X = 625;
 // collision will ever let two fighters stand - or the attack could never
 // connect at point-blank range. Sprite bodies render ~60px wide at full
 // scale, so the enforced gap is ~68px; these all clear it with margin.
-const PUNCH = { duration: 22, activeStart: 6, activeEnd: 14, damage: 6, range: 74 };
+// PUNCH's old range (74) only cleared that by 6px - fine at the absolute
+// closest possible clinch, but two fighters throwing punches at each other
+// rarely sit at exactly that minimum gap, so at any more normal engagement
+// distance the animation's extended-arm reach visually looked like it
+// connected while the actual hitbox (checkHit in game.js) missed and no
+// damage registered. Bumped well past that bare-minimum margin instead.
+const PUNCH = { duration: 22, activeStart: 6, activeEnd: 14, damage: 6, range: 90 };
 const KICK = { duration: 34, activeStart: 10, activeEnd: 22, damage: 10, range: 84, cost: 20 };
 // Ranged, not a melee hitbox - the cast animation plays out over `release`
 // frames, then game.js reads "special-release" off lastEvent and spawns a
@@ -74,11 +80,13 @@ const KNOCKBACK_ARC_HEIGHT = 55;
 // MIN_FIGHTER_GAP (68, game.js) same as every melee range does - a range of
 // 60 here missed every time (verified live: two grounded fighters can never
 // stand closer than 68px apart in the first place, so a 60px range could
-// never reach anyone even standing right next to you). Sheet swapped to a
-// shorter 4-frame version (from 8) with a real crouch on frame 0 - duration
-// shortened to match, active window re-timed to the new sheet's actual
-// punch-connects frame (frame 2, verified against the art).
-export const UPPERCUT = { duration: 24, activeStart: 12, activeEnd: 19, damage: 14, range: 80, height: 90, knockback: 100 };
+// never reach anyone even standing right next to you). Sheet swapped again
+// to a clearer 3-frame version (from 4) - crouch, strike (a motion-blur
+// streak on the swipe that actually reads as a hit), recovery - duration
+// shortened to match (6 game-frames per sheet frame, same pacing the old
+// 4-frame/24-duration sheet used), active window re-timed to the strike
+// frame specifically (frame 1, verified against the art).
+export const UPPERCUT = { duration: 18, activeStart: 6, activeEnd: 11, damage: 14, range: 80, height: 90, knockback: 100 };
 // Archetype-specific specials. Flipper (rat rush) and Collector (bolt) are
 // ranged, spawned via spawnProjectile in game.js off the shared "special"
 // cast pose. Builder and Hodler are melee with their own dedicated sheets/

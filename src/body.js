@@ -120,12 +120,13 @@ const HEAD_ANCHORS = {
   slide: [{"x":13.5,"y":2}],
   // Single mid-air knocked-back pose.
   knockback: [{"x":63.0,"y":4}],
-  // 4-frame crouch-charge-into-upward-strike, replacing the old 8-frame
-  // sheet (shorter/faster, real crouch on frame 0). Frame 2 (the punch
-  // connecting) again had the raised fist hijacking the topmost-opaque-
-  // pixel sample instead of the hood - re-sampled restricted to the body's
-  // central column, same fix as the old sheet needed.
-  uppercut: [{"x":39.7,"y":10},{"x":46.2,"y":-7},{"x":44.2,"y":0},{"x":42.3,"y":-6}],
+  // 3-frame crouch-strike-recovery, replacing the old 4-frame sheet - a
+  // clearer connecting swipe (motion-blur streak on the punching arm) that
+  // reads better as an actual hit. Frame 1 (the strike) again had the
+  // raised arm/streak hijacking the topmost-opaque-pixel sample instead of
+  // the hood - re-sampled restricted to the body's central-left column,
+  // same fix the old sheet needed.
+  uppercut: [{"x":38.9,"y":9},{"x":48.2,"y":-5},{"x":42.4,"y":-7}],
   // 8-frame crouch-into-flex victory pose - same sampling method.
   flex: [{"x":37.8,"y":-7},{"x":38.4,"y":-4},{"x":38.0,"y":5},{"x":38.0,"y":7},{"x":37.9,"y":7},{"x":41.3,"y":5},{"x":42.8,"y":-1},{"x":40.0,"y":-2}],
   // 15-frame high-kick special (Builder) - windup/lean, kick, recovery.
@@ -183,9 +184,10 @@ const ANIMS = {
   slide: { sheet: "slide", frames: 1, durationFrames: 11, loop: false },
   // Single still frame held while knocked back from a connecting slide.
   knockback: { sheet: "knockback", frames: 1, durationFrames: 28, loop: false },
-  // durationFrames (24) over the sheet's 4 frames matches UPPERCUT.duration
-  // in fighter.js - shorter/faster sheet, shorter duration to match.
-  uppercut: { sheet: "uppercut", frames: 4, durationFrames: 24, loop: false },
+  // durationFrames (18) over the sheet's 3 frames matches UPPERCUT.duration
+  // in fighter.js - 6 game-frames per sheet frame, same per-frame pacing
+  // the old 4-frame/24-duration sheet used, just one fewer frame.
+  uppercut: { sheet: "uppercut", frames: 3, durationFrames: 18, loop: false },
   // Held while charging (see fighter.js's uppercut-charge state) - frozen
   // on the same sheet's frame 0, the wind-up's very first pose (a real
   // crouch on the current sheet), for however long the key stays down.
@@ -498,19 +500,23 @@ export function drawSurgeBlast(ctx, x, y, frame, facing) {
 
 // Flipper's special - a rat swarm rushing along the ground instead of a
 // ranged bolt (game.js owns its position/lifetime, same as the surge blast
-// above). 18 frames, rearing up then flattening into a low charge - cycled
+// above). 8 frames, rearing up then flattening into a low charge - cycled
 // on a loop while it travels rather than played once, so it reads as a
-// scuttling mass the whole time it's in flight.
+// scuttling mass the whole time it's in flight. Swapped for a bigger,
+// clearer pair of rats (was a small indistinct blob at this draw scale) -
+// same 190px frame size and per-frame layout as the sheet it replaced, just
+// 8 frames instead of 18.
 const RAT_RUSH_SHEET = loadImg("assets/fx/rat-rush.png");
 const RAT_RUSH_FRAME = 190;
-export const RAT_RUSH_TOTAL_FRAMES = 18;
+export const RAT_RUSH_TOTAL_FRAMES = 8;
 const RAT_RUSH_DRAW_SCALE = 0.55;
-// The rat art itself only fills each 190px frame down to row ~148 - there's
-// a consistent ~41px transparent gap below the rats in every frame (measured
-// via alpha bounding box). Anchoring the frame's bottom edge to ground level
-// left the rats floating in that gap - 41 * RAT_RUSH_DRAW_SCALE ≈ 23px offset
-// pushes the actual rat art down to the real ground line instead.
-const RAT_RUSH_Y_OFFSET = 23;
+// The rat art only fills each 190px frame down to row ~151 - a ~39px
+// transparent gap below the rats in every frame (measured via alpha
+// bounding box, averaged across frames). Anchoring the frame's bottom edge
+// to ground level left the rats floating in that gap - 39 *
+// RAT_RUSH_DRAW_SCALE ≈ 21px offset pushes the actual rat art down to the
+// real ground line instead.
+const RAT_RUSH_Y_OFFSET = 21;
 
 // Ground-anchored (bottom edge at y, not center) unlike the head-height
 // surge blast - this is meant to be hugging the floor it's rushing across.
@@ -556,6 +562,41 @@ export function drawEnergyBurst(ctx, x, y, frame) {
     0,
     ENERGY_BURST_FRAME,
     ENERGY_BURST_FRAME,
+    -size / 2,
+    -size / 2,
+    size,
+    size,
+  );
+  ctx.restore();
+}
+
+// Generic melee impact flash - punch/kick/slide/uppercut all had NO hit
+// feedback at all with blood turned off (spawnHitEffects in game.js used to
+// bail out entirely before anything visual happened unless blood was
+// unlocked), so a landed hit with blood off read as silently absorbed even
+// though damage really did register. This plays unconditionally on every
+// landed melee hit regardless of the blood setting - the energy burst above
+// already covers ranged special impacts the same always-on way. Only 2
+// frames (a sharp flash, not a lingering burst) - held a few ticks each in
+// game.js rather than stepped every frame, or it'd read as a single blink.
+const HIT_SPARK_SHEET = loadImg("assets/fx/hit-spark.png");
+const HIT_SPARK_FRAME = 72;
+export const HIT_SPARK_TOTAL_FRAMES = 2;
+const HIT_SPARK_DRAW_SCALE = 0.75;
+
+export function drawHitSpark(ctx, x, y, frame) {
+  if (!HIT_SPARK_SHEET.complete || HIT_SPARK_SHEET.naturalWidth === 0) return;
+  const f = Math.min(HIT_SPARK_TOTAL_FRAMES - 1, Math.max(0, frame));
+  const size = HIT_SPARK_FRAME * HIT_SPARK_DRAW_SCALE;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.translate(x, y);
+  ctx.drawImage(
+    HIT_SPARK_SHEET,
+    f * HIT_SPARK_FRAME,
+    0,
+    HIT_SPARK_FRAME,
+    HIT_SPARK_FRAME,
     -size / 2,
     -size / 2,
     size,
