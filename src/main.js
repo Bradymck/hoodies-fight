@@ -7,8 +7,10 @@ import { speakTaunt } from "./tts.js";
 import { connectWallet, hasInjectedWallet, getConnectedAccount, disconnectWallet } from "./wallet.js";
 import { initBloodCode } from "./blood-code.js";
 import { initGamepadDebugOverlay } from "./gamepad.js";
+import { initGamepadNav } from "./gamepad-nav.js";
 
 initGamepadDebugOverlay();
+initGamepadNav();
 
 initBloodCode();
 
@@ -30,7 +32,6 @@ const startBtn = document.getElementById("start-btn");
 const connectWalletBtn = document.getElementById("connect-wallet-btn");
 const walletStatus = document.getElementById("wallet-status");
 const openseaBtn = document.getElementById("opensea-btn");
-const freePlayBtn = document.getElementById("free-play-btn");
 const hypeEl = document.getElementById("hype");
 const practiceToggle = document.getElementById("practice-toggle");
 const readyBtn = document.getElementById("ready-btn");
@@ -419,6 +420,7 @@ async function renderPanel(side) {
     const card = document.createElement("div");
     card.className = "character-card";
     card.dataset.tokenId = id;
+    card.tabIndex = 0;
     if (state.selectedId === id) card.classList.add("selected");
     card.innerHTML = `
       <img src="${token.image?.svg ?? ""}" alt="${type}" />
@@ -426,6 +428,12 @@ async function renderPanel(side) {
       ${info ? `<div class="card-badge">${info.emoji}</div>` : ""}
     `;
     card.addEventListener("click", () => selectFighter(side, id, token));
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        card.click();
+      }
+    });
     if (info) attachBadgeTooltip(card.querySelector(".card-badge"), archetypeTooltip(type, rareTraitCount));
     grid.appendChild(card);
   });
@@ -552,18 +560,17 @@ async function proceedWithWallet(address, { unlockSound }) {
     if (unlockSound) playSound("uiclick");
 
     if (!tokenIds.length) {
+      // No separate "Play Free Instead" button here - the always-visible
+      // "PLAY FREE" button in the local-play column already covers this,
+      // and having two buttons that do the exact same thing on screen at
+      // once read as redundant/confusing (reported live).
       walletStatus.textContent = "No Hoodies in this wallet yet - grab one and come back swinging.";
       openseaBtn.classList.remove("hidden");
-      // Not everyone with a wallet wants to buy in just to try it out - this
-      // drops them straight into the same free select-screen flow as
-      // someone with no wallet at all, no NFT required.
-      freePlayBtn.classList.remove("hidden");
       connectWalletBtn.disabled = false;
       return;
     }
 
     openseaBtn.classList.add("hidden");
-    freePlayBtn.classList.add("hidden");
     walletStatus.textContent = `${tokenIds.length} Hoodie${tokenIds.length === 1 ? "" : "s"} found - pick your fighter.`;
     enterSelectScreen(tokenIds);
   } catch (err) {
@@ -576,7 +583,6 @@ connectWalletBtn.addEventListener("click", async () => {
   connectWalletBtn.disabled = true;
   walletStatus.textContent = "Connecting wallet...";
   openseaBtn.classList.add("hidden");
-  freePlayBtn.classList.add("hidden");
 
   try {
     const address = await connectWallet();
@@ -600,15 +606,6 @@ async function tryResumeWalletSession() {
   connectWalletBtn.disabled = true;
   await proceedWithWallet(address, { unlockSound: false });
 }
-
-// Drops a wallet-connected-but-no-Hoodie visitor straight into the same
-// free select-screen flow local-play's own button already offers -
-// duplicated here so the "no Hoodies yet" status message has its own
-// obvious next step right below it, instead of pointing back up the page.
-freePlayBtn.addEventListener("click", () => {
-  playSound("uiclick");
-  enterSelectScreen(null);
-});
 
 const ROUNDS_TO_WIN = 2;
 // A drawn round (timeout tie or double-KO) replays instead of counting -
