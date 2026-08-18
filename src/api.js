@@ -187,6 +187,20 @@ export function reportMatchResult(tokenId, opponentTokenId, result) {
   }).catch(() => {});
 }
 
+// Used to show a Hoodie's win/loss record on the setup screen once
+// selected. Returns null on any failure (missing KV, network error, bad
+// response) rather than throwing - a stats fetch failing should never block
+// picking a fighter.
+export async function fetchFighterStats(tokenId) {
+  try {
+    const res = await fetch(`/api/hoodie/${tokenId}/stats`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function loadFighterData(tokenId) {
   const [token, talk, talkHistory] = await Promise.all([
     fetchToken(tokenId),

@@ -1,4 +1,4 @@
-import { loadFighterData, fetchWalletHoodies, fetchToken } from "./api.js";
+import { loadFighterData, fetchWalletHoodies, fetchToken, fetchFighterStats } from "./api.js";
 import { Fighter, ARCHETYPES, RARE_TRAIT_HEALTH_BONUS } from "./fighter.js";
 import { createGame } from "./game.js";
 import { initSound, playSound, playRandomTrack, stopMusic } from "./sound.js";
@@ -361,8 +361,21 @@ async function selectFighter(side, tokenId, token) {
   panelState[side].selectedId = tokenId;
   const label = side === "p1" ? p1Label : p2Label;
   const type = token.traits?.hoodie ?? "Builder";
-  label.textContent = `${token.token?.name ?? `#${tokenId}`} - ${type}`;
+  const baseLabel = `${token.token?.name ?? `#${tokenId}`} - ${type}`;
+  label.textContent = baseLabel;
   fitSelectScreen();
+
+  // Fire-and-forget alongside loadFighterData below rather than chained
+  // after it - stats and fighter art are independent, no reason to make one
+  // wait on the other. Guarded on selectedId still matching tokenId in case
+  // the user picks a different card before this resolves, and on
+  // label.textContent still matching baseLabel in case the loadFighterData
+  // failure branch below has already overwritten it with an error message.
+  fetchFighterStats(tokenId).then((stats) => {
+    if (!stats || panelState[side].selectedId !== tokenId || label.textContent !== baseLabel) return;
+    label.textContent = `${baseLabel} · ${stats.wins}W-${stats.losses}L`;
+    fitSelectScreen();
+  });
 
   try {
     const data = await loadFighterData(tokenId);
