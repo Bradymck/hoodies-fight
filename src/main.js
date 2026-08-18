@@ -6,6 +6,9 @@ import { pickRandomArena, drawArena, drawFighter } from "./body.js";
 import { speakTaunt } from "./tts.js";
 import { connectWallet, hasInjectedWallet, getConnectedAccount, disconnectWallet } from "./wallet.js";
 import { initBloodCode } from "./blood-code.js";
+import { initGamepadDebugOverlay } from "./gamepad.js";
+
+initGamepadDebugOverlay();
 
 initBloodCode();
 
