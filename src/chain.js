@@ -115,8 +115,23 @@ export async function fetchWalletHoodiesOnChain(address) {
   const owned = [];
   for (let i = 0; i < candidateIds.length; i += OWNERSHIP_CHECK_CONCURRENCY) {
     const batch = candidateIds.slice(i, i + OWNERSHIP_CHECK_CONCURRENCY);
+    // One retry per candidate before giving up - a bare .catch(() => null)
+    // with no retry meant a single transient RPC blip on Robinhood Chain's
+    // (documented, recurring) flaky RPC silently dropped a token the
+    // wallet genuinely owns. For a wallet holding only one or two Hoodies,
+    // this could mean the WHOLE scan comes back empty ("no Hoodies in
+    // this wallet") from one unlucky request, not just an undercount.
     const owners = await Promise.all(
-      batch.map((id) => readOwnerOf(id).catch(() => null)),
+      batch.map(async (id) => {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            return await readOwnerOf(id);
+          } catch {
+            // one retry, then give up on this candidate
+          }
+        }
+        return null;
+      }),
     );
     batch.forEach((id, j) => {
       if (owners[j] && owners[j].toLowerCase() === address.toLowerCase()) owned.push(id);
