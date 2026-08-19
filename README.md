@@ -70,7 +70,9 @@ The game keeps a lightweight, ambient win/loss record per Hoodie token ID - full
 
 - `GET /api/hoodie/{tokenId}/stats` - wins/losses/matches for one Hoodie
 - `GET /api/matches/recent?limit=25` - newest completed matches across all Hoodies
-- `POST /api/match-result` - called by the game client itself when a match ends
+- `GET /api/leaderboard?limit=10` - top Hoodies by win count
+- `GET /api/rivalry/{tokenIdA}/{tokenIdB}` - head-to-head win record between two Hoodies (order doesn't matter)
+- `POST /api/match-result` - called by the game client itself when a match ends; when `opponentTokenId` is present this also updates that pairing's rivalry record and, on a win, the leaderboard
 
 Unauthenticated by design, same trust model as everything else here (no wallet writes, nothing on-chain) - treat it as a fun social signal, not a verified competitive record. Backed by a small Redis store (`api/_lib/redis.js` talks to it over plain REST - no npm client, same zero-dependency approach as the rest of the repo).
 

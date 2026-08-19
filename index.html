@@ -38,6 +38,7 @@
           </a>
         </div>
       </div>
+      <button id="leaderboard-btn" class="secondary-btn">🏆 LEADERBOARD</button>
     </div>
   </div>
 
@@ -128,8 +129,13 @@
         <div id="countdown" class="hidden"></div>
         <div id="result" class="hidden">
           <div id="result-title"></div>
+          <!-- Cosmetic flex only, not a trust boundary - see main.js's
+               maybeShowVictoryFlourish for why a client-only "verified" badge
+               is fine to leave client-spoofable here. -->
+          <div id="result-verified-badge" class="hidden">&#10003; VERIFIED OWNER WIN</div>
           <div id="result-actions" class="hidden">
             <button id="result-again" class="hidden">PLAY AGAIN</button>
+            <button id="result-share" class="secondary-btn hidden">SHARE YOUR WIN</button>
             <button id="result-back">BACK TO MENU</button>
           </div>
         </div>
@@ -177,6 +183,10 @@
         <span class="key-caps"><kbd class="key-cap">E</kbd></span>
         <span class="key-label">Slide</span>
       </li>
+      <li class="key-row">
+        <span class="key-caps"><kbd class="key-cap">Q</kbd></span>
+        <span class="key-label">Dash</span>
+      </li>
     </ul>
     <h3 class="panel-heading">Controller</h3>
     <ul class="key-list" id="gamepad-key-list">
@@ -217,6 +227,10 @@
         <span class="key-label">Slide</span>
       </li>
       <li class="key-row">
+        <span class="key-caps"><kbd class="key-cap" data-gp-action="dash"></kbd></span>
+        <span class="key-label">Dash</span>
+      </li>
+      <li class="key-row">
         <span class="key-caps"><kbd class="key-cap">Start / Select</kbd></span>
         <span class="key-label">Open/close this menu</span>
       </li>
@@ -240,6 +254,16 @@
       <button id="gamepad-remap-reset" class="secondary-btn">Reset to Defaults</button>
       <button id="gamepad-remap-done">Done</button>
     </div>
+  </div>
+
+  <!-- Only ever opened from #leaderboard-btn on the setup screen (see
+       main.js) - right-anchored (border-left) rather than mirroring
+       #controls-panel's own left side, so the two can never visually
+       collide if a visitor somehow has both open at once. -->
+  <div id="leaderboard-panel" class="hidden">
+    <h3 class="panel-heading">Leaderboard</h3>
+    <ul class="leaderboard-list" id="leaderboard-list"></ul>
+    <button id="leaderboard-close-btn" class="secondary-btn">Close</button>
   </div>
 
   <footer id="site-footer">

@@ -64,6 +64,18 @@ export async function readOwnerOf(tokenId) {
   return decodeAddress(result);
 }
 
+// Only called by main.js's cosmetic post-match "verified owner" flourish -
+// see that function's own comment for why a purely-client win screen can't
+// be made cheat-proof anyway (this is a flex, not a security gate). Goes
+// straight to the chain rather than the REST API - a REST API answering
+// "who owns this" is one more thing to trust for a check that's already
+// purely cosmetic; ownerOf() on the actual contract is the one source that
+// can't be spoofed by a compromised/lagging indexer.
+export async function verifyOwnership(tokenId, address) {
+  const owner = await readOwnerOf(tokenId);
+  return owner.toLowerCase() === address.toLowerCase();
+}
+
 // This contract doesn't implement ERC721Enumerable - tokenOfOwnerByIndex
 // reverts (confirmed live) - so there's no direct "list token IDs owned by
 // X" call. Transfer event logs stand in for that instead: every token this

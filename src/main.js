@@ -2,12 +2,14 @@ import { loadFighterData, fetchWalletHoodies, fetchToken, fetchFighterStats } fr
 import { Fighter, ARCHETYPES, RARE_TRAIT_HEALTH_BONUS } from "./fighter.js";
 import { createGame } from "./game.js";
 import { initSound, playSound, playRandomTrack, stopMusic } from "./sound.js";
-import { pickRandomArena, drawArena, drawFighter } from "./body.js";
+import { pickRandomArena, drawArena, drawFighter, drawFlash } from "./body.js";
 import { speakTaunt } from "./tts.js";
 import { connectWallet, hasInjectedWallet, getConnectedAccount, disconnectWallet } from "./wallet.js";
+import { verifyOwnership } from "./chain.js";
 import { initBloodCode } from "./blood-code.js";
 import { initGamepadDebugOverlay } from "./gamepad.js";
 import { initGamepadNav } from "./gamepad-nav.js";
+import { renderKOShareCard, shareKOImage } from "./share-card.js";
 
 initGamepadDebugOverlay();
 initGamepadNav();
@@ -115,6 +117,66 @@ document.addEventListener("click", (e) => {
 exitMatchBtn.addEventListener("click", () => {
   stopMusic();
   location.reload();
+});
+
+// ===== Leaderboard panel (setup screen only) =====
+//
+// Reads GET /api/leaderboard - unlike pfp-brawl's adapter system this repo
+// tracks a single hardcoded collection, so there's no `adapter` query param
+// to pass through (see api/leaderboard.js, which reads the plain
+// leaderboard:wins sorted set with no namespacing).
+const leaderboardBtn = document.getElementById("leaderboard-btn");
+const leaderboardPanel = document.getElementById("leaderboard-panel");
+const leaderboardCloseBtn = document.getElementById("leaderboard-close-btn");
+const leaderboardList = document.getElementById("leaderboard-list");
+
+async function loadLeaderboard() {
+  leaderboardList.innerHTML = `<li class="leaderboard-loading"><div class="spinner"></div></li>`;
+  try {
+    const res = await fetch("/api/leaderboard?limit=10");
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const { fighters } = await res.json();
+    if (!fighters?.length) {
+      leaderboardList.innerHTML = `<li class="leaderboard-empty">No wins recorded yet - be the first.</li>`;
+      return;
+    }
+    leaderboardList.innerHTML = "";
+    fighters.forEach((fighter, i) => {
+      const row = document.createElement("li");
+      row.className = "leaderboard-row";
+      row.innerHTML = `
+        <span class="leaderboard-rank">#${i + 1}</span>
+        <span class="leaderboard-name">#${fighter.tokenId}</span>
+        <span class="leaderboard-wins">${fighter.wins}W</span>
+      `;
+      leaderboardList.appendChild(row);
+      // Best-effort name upgrade over the tokenId fallback already showing -
+      // fetchToken is the same per-card call the select-screen grid already
+      // makes, just one-off here instead of paginated. A failure leaves the
+      // #tokenId label in place rather than blocking the rest of the row.
+      fetchToken(fighter.tokenId)
+        .then((token) => {
+          const name = token?.token?.name;
+          if (name) row.querySelector(".leaderboard-name").textContent = name;
+        })
+        .catch(() => {});
+    });
+  } catch {
+    leaderboardList.innerHTML = `<li class="leaderboard-empty">Couldn't load the leaderboard right now.</li>`;
+  }
+}
+
+leaderboardBtn.addEventListener("click", () => {
+  playSound("uiclick");
+  leaderboardPanel.classList.remove("hidden");
+  loadLeaderboard();
+});
+leaderboardCloseBtn.addEventListener("click", () => leaderboardPanel.classList.add("hidden"));
+// Same click-outside-to-close convention as #controls-panel above.
+document.addEventListener("click", (e) => {
+  if (leaderboardPanel.classList.contains("hidden")) return;
+  if (leaderboardPanel.contains(e.target) || e.target === leaderboardBtn) return;
+  leaderboardPanel.classList.add("hidden");
 });
 
 // Rotated randomly per visit so the same line doesn't go stale. Both play
@@ -695,7 +757,13 @@ async function runMatch(data1, data2, canvas, ctx, { p2AI = false, practiceMode 
       continue;
     }
 
-    return showMatchOverActions(p2AI);
+    const matchLoser = matchWinner === p1 ? p2 : p1;
+    // p1 is always the human-controlled side today (p2AI is always true -
+    // see readyBtn's click handler) - this is what gates the verified-owner
+    // flourish to "a real player won", not the AI. A future real PvP lobby
+    // would need a genuine per-side "is this a human, and which wallet"
+    // concept instead of this shortcut.
+    return showMatchOverActions(p2AI, matchWinner, matchLoser, matchWinner === p1, canvas, ctx, wins);
   }
 }
 
@@ -703,13 +771,55 @@ async function runMatch(data1, data2, canvas, ctx, { p2AI = false, practiceMode 
 // Again", which is only ever offered for a vs-AI match - see the comment
 // on startMatch's while loop for why a PvP "Back" doesn't try to hand-reset
 // UI state itself.
-function showMatchOverActions(p2AI) {
+//
+// canvas/ctx here are the same live match canvas startMatch already set up -
+// game.js stops drawing once a match ends but never clears the canvas, so by
+// the time this runs it's still showing the frozen winner-flex frame, exactly
+// what the share card and flourish flash both want to capture/draw over.
+function showMatchOverActions(p2AI, matchWinner, matchLoser, isP1Winner, canvas, ctx, wins) {
   return new Promise((resolve) => {
     const actions = document.getElementById("result-actions");
     const againBtn = document.getElementById("result-again");
     const backBtn = document.getElementById("result-back");
+    const shareBtn = document.getElementById("result-share");
+    const verifiedBadge = document.getElementById("result-verified-badge");
     actions.classList.remove("hidden");
     againBtn.classList.toggle("hidden", !p2AI);
+    shareBtn.classList.remove("hidden");
+    shareBtn.disabled = false;
+    shareBtn.textContent = "SHARE YOUR WIN";
+
+    // Flips once cleanup() runs (Play Again/Back clicked) - guards the
+    // flourish's own async ownership check and the share button's async
+    // render/share call, both of which can still be in flight after the
+    // result screen has already been dismissed, from touching DOM state
+    // (badge, button label) that's moved on to the next round/match.
+    let cancelled = false;
+
+    async function onShare() {
+      shareBtn.disabled = true;
+      shareBtn.textContent = "RENDERING…";
+      try {
+        const shareCanvas = await renderKOShareCard({
+          winnerName: matchWinner.data.name,
+          loserName: matchLoser.data.name,
+          roundScore: wins,
+          winnerCanvas: canvas,
+        });
+        await shareKOImage(shareCanvas, {
+          title: `${matchWinner.data.name} won in Hood Vs Hood`,
+          text: `${matchWinner.data.name} just won a fight in Hood Vs Hood!`,
+        });
+      } finally {
+        if (!cancelled) {
+          shareBtn.disabled = false;
+          shareBtn.textContent = "SHARE YOUR WIN";
+        }
+      }
+    }
+    shareBtn.addEventListener("click", onShare);
+
+    maybeShowVictoryFlourish(matchWinner, isP1Winner, canvas, ctx, verifiedBadge, () => cancelled);
 
     function onAgain() {
       cleanup();
@@ -720,15 +830,81 @@ function showMatchOverActions(p2AI) {
       resolve(false);
     }
     function cleanup() {
+      cancelled = true;
       actions.classList.add("hidden");
       document.getElementById("result").classList.add("hidden");
       againBtn.removeEventListener("click", onAgain);
       backBtn.removeEventListener("click", onBack);
+      shareBtn.removeEventListener("click", onShare);
+      shareBtn.classList.add("hidden");
+      verifiedBadge.classList.add("hidden");
     }
 
     againBtn.addEventListener("click", onAgain);
     backBtn.addEventListener("click", onBack);
   });
+}
+
+// Cosmetic flex, not a security boundary - a purely client-side game has no
+// way to make a client-only win screen cheat-proof (a visitor could patch
+// this function to always show the badge), and that's fine here because
+// nothing of real value is gated behind it: no prize, no leaderboard/rivalry
+// write depends on this check, it only ever changes what the result screen
+// looks like. Every early-return below is a "degrade to the completely
+// normal win screen" path, not an error case, which is exactly the point -
+// the overwhelmingly common case (disconnected wallet, AI opponent, free
+// play) should hit none of this and see zero behavior change.
+async function maybeShowVictoryFlourish(matchWinner, isP1Winner, canvas, ctx, verifiedBadge, isCancelled) {
+  if (!isP1Winner) return; // AI (p2) won - see runMatch's own comment on why p1 is "the real player" today
+
+  let address = null;
+  try {
+    address = await getConnectedAccount();
+  } catch {
+    address = null;
+  }
+  if (!address || isCancelled()) return; // free play, or never connected
+
+  let owns = false;
+  try {
+    owns = await verifyOwnership(matchWinner.data.tokenId, address);
+  } catch {
+    // RPC hiccup, wrong chain mid-check, whatever - fail closed to the
+    // normal screen rather than risk showing "verified" on an error.
+    owns = false;
+  }
+  if (!owns || isCancelled()) return; // connected wallet doesn't actually hold this token
+
+  verifiedBadge.classList.remove("hidden");
+  playSound("ko", { volume: 0.9 });
+  flashVictoryScreen(canvas, ctx, isCancelled);
+}
+
+// Two decaying pulses over the frozen final match frame rather than a flat
+// single blink, so it reads as a deliberate flourish rather than a glitch.
+// drawFlash only overlays semi-transparent white on top of whatever's
+// already drawn (see body.js) - it never clears first - so the winner's
+// flex pose and arena background underneath are untouched, just flashed
+// over. Runs its own short rAF loop instead of hooking into game.js's, since
+// that loop already stopped (createGame's returned stopGate) by the time
+// this fires.
+const VICTORY_FLASH_FRAMES = 30;
+function flashVictoryScreen(canvas, ctx, isCancelled) {
+  let frame = 0;
+  function step() {
+    // Bails the instant Play Again/Back is clicked (same cancelled flag
+    // showMatchOverActions' cleanup() flips) - without this, a fast click
+    // right as the flourish starts would leave this rAF loop still running
+    // and painting white flash frames over whatever the NEXT match's own
+    // loop is now drawing to this same ctx/canvas.
+    if (isCancelled()) return;
+    const t = frame / VICTORY_FLASH_FRAMES;
+    const pulse = Math.abs(Math.sin(t * Math.PI * 2.5));
+    drawFlash(ctx, canvas.width, canvas.height, pulse * (1 - t) * 0.7);
+    frame++;
+    if (frame <= VICTORY_FLASH_FRAMES) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 }
 
 function resetBars() {
