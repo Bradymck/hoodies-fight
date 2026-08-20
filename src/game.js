@@ -28,11 +28,11 @@ import {
   UPPERCUT,
   AIR_ATTACK,
   AIR_PUNCH_CHAIN,
+  AIR_SPECIAL,
   AIR_SPECIAL_KNOCKBACK,
   AIR_KICK_POSES,
   KICK_POSES,
-  BUILDER_SPECIAL,
-  HODLER_SPECIAL,
+  SPECIAL,
   ARENA_MIN_X,
   ARENA_MAX_X,
   computeHitstopFrames,
@@ -82,8 +82,7 @@ const SHAKE_ON_SPECIAL = 12;
 // there reads as broken jitter rather than "big hit". Reserved for hits where
 // defender.lastComboEnder is true (see isComboEnder in fighter.js) - checked
 // at each checkHit/updateSlide/checkUppercutHit/checkAirAttackHit/
-// checkBuilderSpecialHit/checkHodlerSpecialHit/applyHomingHit hit branch
-// below.
+// checkAirPunchHit/applyHomingHit hit branch below.
 const SHAKE_ON_ENDER = 22;
 const FLASH_ON_HIT = 0.25;
 const FLASH_ON_ENDER = 0.5;
@@ -195,9 +194,9 @@ const SLIDE_HIT_RADIUS = 70;
 const MIN_FIGHTER_GAP = 68;
 
 // A fighter counts as "airborne" for every one of the grounded-attack
-// exclusion checks below (checkHit/updateSlide/checkBuilderSpecialHit/
-// checkHodlerSpecialHit/updateProjectiles' own dodge logic/resolveCollision)
-// the moment they're off the ground for ANY reason - a voluntary jump, an
+// exclusion checks below (checkHit/updateSlide/updateProjectiles' own dodge
+// logic/resolveCollision) the moment they're off the ground for ANY reason -
+// a voluntary jump, an
 // uppercut-launched juggle, or mid-way through throwing airKick/flyingKick
 // (fighter.js's aerial-attack poses): airborneT (fighter.js) keeps counting
 // through that whole flight without resetting specifically so a fighter
@@ -425,7 +424,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
               ? GROUND_Y - 70
               : AIR_PUNCH_CHAIN.some((m) => m.state === attacker.state)
                 ? GROUND_Y - 110
-                : attacker.state === "uppercut"
+                : attacker.state === "uppercut" || attacker.state === "finisherPunch" || attacker.state === "finisherKick"
                   ? GROUND_Y - 90
                   : GROUND_Y - 50;
     const contactX = defenderCenterX + towardAttacker * (gapX * 0.4);
@@ -703,8 +702,9 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     }
   }
 
-  // Punch/kick only now - special has no melee hitbox of its own, see
-  // spawnProjectile/updateProjectiles below for its (ranged) hit detection.
+  // Punch/kick/the ground finisher - special has no melee hitbox of its own,
+  // see spawnProjectile/updateProjectiles below for its (ranged) hit
+  // detection.
   function checkHit(attacker, defender) {
     const box = attacker.attackHitbox();
     if (!box) return;
@@ -715,8 +715,12 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     // (or air-attacking) defender with another uppercut is the entire point
     // of that move being a real anti-air/launcher. checkAirAttackHit below
     // ALSO deliberately doesn't carry it - that's the one attack in this
-    // engine meant to reach an airborne target.
-    if (isAirborne(defender.state)) return;
+    // engine meant to reach an airborne target. The ground finisher
+    // (box.kind === "finisher", requirement 9) is the SAME kind of
+    // deliberate exception, for the same reason - reaching a still-juggled
+    // opponent is the entire point of that move too, even though it's
+    // otherwise thrown from the ground like an ordinary punch/kick.
+    if (isAirborne(defender.state) && box.kind !== "finisher") return;
     // Ducking clears kicks clean over the top - punches still connect
     // through a crouch, only the low kick whiffs. blockLow (crouch+block
     // held together - see fighter.js's update()) is still physically
@@ -752,6 +756,19 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         // name regardless of which pose actually threw it, even once a
         // later art pass reintroduces combo-string pose variety.
         attacker.lastEvent = `${box.kind}-hit`;
+        // Ground finisher slam (requirement 9) - a deliberate, move-specific
+        // override of takeDamage's own automatic juggle routing, same
+        // pattern checkAirPunchHit's own punchDown branch already
+        // established: "finisher" isn't in fighter.js's JUGGLE_SPIKE_KINDS
+        // on purpose, so without this the hit would just decay-relaunch the
+        // defender (takeDamage's plain wasAlreadyJuggled path) instead of
+        // ending the sequence in a real hard-knockdown slam - the entire
+        // point of committing to this move. Checked AFTER takeDamage,
+        // reading defender.state fresh (never on a parry, which routes to
+        // "hitstun"/"block" instead of staying "juggled").
+        if (box.kind === "finisher" && defender.state === "juggled") {
+          defender.applyJuggleSpike();
+        }
       }
       // defender.lastComboEnder/comboCount are single-frame-lived, set by
       // takeDamage just above - both stay at their neutral defaults (false /
@@ -772,10 +789,10 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       // spawnHitEffects already uses. "kick" isn't in fighter.js's
       // ENDER_KINDS, so a pure kick string never earns the bigger
       // SHAKE_ON_ENDER/energy-burst treatment through the normal combo-ender
-      // path the way punchDown/uppercut/slide/special do - this gives kick3
-      // specifically a bit of that same weight inline instead, the same
-      // shake bump and impact burst every archetype special already gets
-      // (checkBuilderSpecialHit/checkHodlerSpecialHit below), reusing the
+      // path the way punchDown/uppercut/slide/special/finisher do - this
+      // gives kick3 specifically a bit of that same weight inline instead,
+      // the same shake bump and impact burst every archetype's ranged
+      // special already gets (see updateProjectiles below), reusing the
       // existing energy-burst FX rather than adding new art.
       if (!wasBlocking && attacker.state === "kick3") {
         shake = Math.max(shake, SHAKE_ON_SPECIAL);
@@ -805,18 +822,6 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     const attackerCenterX = attacker.x + BODY_CENTER_OFFSET;
     const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
     if (Math.abs(attackerCenterX - defenderCenterX) >= SLIDE_HIT_RADIUS) return;
-
-    // A Hodler holding their own ground special isn't knocked back by a
-    // slide, and doesn't take damage from it either - the slider just stops
-    // dead on contact instead of connecting or passing through, because they
-    // hold their ground.
-    if (defender.data.hoodieType === "Hodler" && defender.state === "specialLow") {
-      attacker.hasHit = true;
-      attacker.lastEvent = "slide-stopped";
-      shake = Math.max(shake, SHAKE_ON_HIT);
-      triggerHitstop(attacker.slideDamage);
-      return;
-    }
 
     // Captured BEFORE takeDamage - a blocked slide never changes
     // defender.state away from "blockLow" (takeDamage's blocked branch only
@@ -894,8 +899,18 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     // two are deliberately different reactions to two different situations,
     // caughtMidair only ever fires for the former.
     const caughtMidair = defender.state === "jump";
+    // Requirement 8's grab economy (see fighter.js's juggleGrabsUsed/
+    // AIR_SPECIAL_REGRAB_MIN_POWER) resets right here, on the ATTACKER,
+    // whenever THIS uppercut opens a genuinely fresh juggle sequence (the
+    // defender wasn't already "juggled" going into it) - captured before
+    // takeDamage runs for the same reason caughtMidair is, and deliberately
+    // NOT done inside takeDamage itself, which is the DEFENDER's own method
+    // and has no business reaching across to reset bookkeeping that lives on
+    // whoever's attacking.
+    const wasAlreadyJuggled = defender.state === "juggled";
     attacker.hasHit = true;
     defender.takeDamage(attacker.uppercutDamage, attacker.x, "uppercut");
+    if (!wasAlreadyJuggled) attacker.juggleGrabsUsed = 0;
     // caughtMidair and a perfect parry can never both be true - block (and
     // so a parry) is only reachable from a grounded state, see update()'s
     // early jump-state return - but this is still checked the same way
@@ -933,10 +948,10 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   //
   // Deliberately does NOT carry any of the defender-state whiff exclusions
   // every OTHER melee check in this file has:
-  //   - no isAirborne(defender.state) exclusion, unlike checkHit/updateSlide/
-  //     checkBuilderSpecialHit/checkHodlerSpecialHit above - reaching an
-  //     airborne (specifically "juggled") defender is the entire reason this
-  //     move exists; excluding it here would make it structurally
+  //   - no isAirborne(defender.state) exclusion, unlike checkHit/updateSlide
+  //     above - reaching an airborne (specifically "juggled") defender is
+  //     the entire reason this move exists; excluding it here would make it
+  //     structurally
   //     impossible to ever extend a juggle with anything but another
   //     uppercut relaunch, exactly the gap this move was built to close.
   //   - no crouch/blockLow whiff, unlike checkHit's own kind==="kick"
@@ -1046,14 +1061,18 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   }
 
   // Fires the instant the shared cast animation completes (fighter.js sets
-  // this exactly once, at SPECIAL.release) - only ever reached by Flipper/
-  // Collector now, since Builder/Hodler have their own dedicated melee
-  // states (specialHigh/specialLow) with their own active-hitbox window
-  // instead of this cast-then-release pose (see checkBuilderSpecialHit/
-  // checkHodlerSpecialHit below).
+  // this exactly once, at SPECIAL.release) - EVERY archetype now goes
+  // through this same cast-then-release pose (stage 3, requirement 6 - see
+  // fighter.js's own archetype-specials rework comment). The only real
+  // archetype split left is which of this engine's two existing projectiles
+  // spawns off the back of it - Flipper+Hodler get the ground-level rat
+  // rush, Builder+Collector get the head-height bolt (true minimal churn:
+  // Flipper already had the rat, Collector already had the bolt, only the
+  // two former-melee archetypes pick up a projectile they didn't have
+  // before).
   function spawnProjectile(fighter) {
     if (fighter.lastEvent !== "special-release") return;
-    const isRatRush = fighter.data.hoodieType === "Flipper";
+    const isRatRush = ["Flipper", "Hodler"].includes(fighter.data.hoodieType);
     if (!isRatRush) playSound("boltWhoosh", { volume: 0.6 });
     projectiles.push({
       kind: isRatRush ? "ratrush" : "bolt",
@@ -1104,14 +1123,33 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   // session (out of scope for this port - see AIR_SPECIAL's own damage
   // comment in fighter.js for why a homing juggle-extender landing multiple
   // pulses per cast would trivially blow through MAX_JUGGLE_HITS in a
-  // single throw). kind "special" (not "uppercut") means this can never
-  // open a fresh juggle on a grounded target on its own - fighter.js's
-  // takeDamage only routes into applyJuggleLaunch when kind==="uppercut" OR
-  // the defender is ALREADY "juggled" - so this hit either lands as an
-  // ordinary combo-scaled grounded hit, or, precisely when it's needed
-  // most, extends an existing juggle sequence through that SAME decay/hit-
-  // cap machinery, never bypassing it.
+  // single throw). kind "special" means takeDamage's own wasAlreadyJuggled
+  // check does the actual relaunch/spike routing automatically whenever the
+  // target is already "juggled" (no separate call needed here - see
+  // JUGGLE_SPIKE_KINDS in fighter.js, which includes "special") - this hit
+  // either lands as an ordinary combo-scaled grounded hit, or, precisely
+  // when it's needed most, extends (or, at real juggle depth, spikes) an
+  // existing juggle sequence through that SAME machinery, never bypassing
+  // it.
+  //
+  // Requirement 8 - "grab and return": captured BEFORE takeDamage runs
+  // (which never changes "juggled"-ness away on its own relaunch path, but
+  // matching every other call site's own before-the-call capture
+  // convention).
   function applyHomingHit(p, target) {
+    const wasJuggled = target.state === "juggled";
+    // Juggled fighters otherwise never move horizontally - see the big
+    // "Airborne juggle" comment in fighter.js: update()'s own "juggled"
+    // branch only ever touches juggleY/juggleVY, this.x is a deliberate
+    // frozen non-choice everywhere else in this engine. This is the one
+    // explicit, one-time override: yank the target back toward the caster
+    // BEFORE the hit lands, so a grab thrown from across the arena reads as
+    // pulling them in, not damaging them in place wherever the original
+    // launch happened to freeze them. Clamped to arena bounds same as every
+    // other x write in this file.
+    if (wasJuggled) {
+      target.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, p.owner.x + p.owner.facing * 80));
+    }
     target.takeDamage(p.owner.airSpecialDamage, p.x, "special");
     p.owner.onLandedHit("special");
     playSound("boltImpact", { volume: 0.65, rate: 1.1 });
@@ -1119,15 +1157,23 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     flash = Math.max(flash, target.lastComboEnder ? FLASH_ON_ENDER : FLASH_ON_HIT);
     triggerHitstop(p.owner.airSpecialDamage, target.comboCount);
     spawnHitEffects(target, { x: p.x - BODY_CENTER_OFFSET, state: "special" });
-    // Juggled fighters never move horizontally on purpose - see the big
-    // "Airborne juggle" comment in fighter.js: update()'s own "juggled"
-    // branch only ever touches juggleY/juggleVY, this.x is a deliberate
-    // frozen non-choice. Pushing them here would fight that invariant and
-    // desync x from where checkUppercutHit/checkAirAttackHit's own fixed-
-    // range follow-up checks expect them to still be sitting. A grounded
-    // target (this hit's other valid case) gets the same small nudge every
-    // other special already gives on a landed hit.
-    if (target.state !== "juggled") {
+    if (wasJuggled) {
+      // Grab economy (fighter.js's AIR_SPECIAL_REGRAB_MIN_POWER) - only the
+      // FIRST successful grab against this juggle sequence refunds its own
+      // cost (juggleGrabsUsed === 0 at hit time, i.e. it hasn't already
+      // landed one this sequence - see checkUppercutHit below for where
+      // this resets on a fresh launch). Every grab after that still costs
+      // the same real power up front (spent on activation, in fighter.js's
+      // airborne branch) but never refunds - "whiff risk stays real" for
+      // the first one, "no more free rides" from the second on.
+      if (p.owner.juggleGrabsUsed === 0) {
+        p.owner.power = Math.min(MAX_POWER, p.owner.power + AIR_SPECIAL.cost);
+      }
+      p.owner.juggleGrabsUsed += 1;
+    } else {
+      // Grounded target (this hit's other valid case) gets the same small
+      // nudge every other special already gives on a landed hit - unchanged
+      // from before this rework.
       target.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, target.x + p.facing * AIR_SPECIAL_KNOCKBACK));
     }
     impacts.push({ x: p.x, y: p.y, t: 0 });
@@ -1233,6 +1279,21 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         const hitRadius = isRatRush ? RAT_RUSH_HIT_RADIUS : PROJECTILE_HIT_RADIUS;
         if (Math.abs(targetCenterX - p.x) < hitRadius) {
           target.takeDamage(p.owner.specialDamage, p.x, "special");
+          // Requirement 7 - a landed, UNBLOCKED grounded special now shoves
+          // the target back a real distance instead of just chipping health
+          // in place, same "knockback" pipeline SLIDE already flies through
+          // (see setKnockbackMotion/jumpOffset in fighter.js). Gated on
+          // target.state === "knockback" rather than re-deriving "was this
+          // blocked" here separately - takeDamage's own blocked branch never
+          // touches state at all (see its blockedByStanding/blockedByLowGuard
+          // early return), so a blocked hit simply never reaches this,
+          // exactly matching "blocked hits get no push, stay in block".
+          // Direction is the projectile's own flight direction (already
+          // pointed away from the caster, toward wherever it was heading) -
+          // pushes the target further the way the hit was already traveling.
+          if (target.state === "knockback") {
+            target.setKnockbackMotion(Math.sign(p.facing), SPECIAL.knockback);
+          }
           // The bolt gets its own dedicated magic-impact sound instead of
           // the generic special-hit thud everything else shares - it's
           // meant to read as a complete impact on its own, not layer under
@@ -1267,62 +1328,6 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     }
   }
 
-  // Builder's special - a big high kick with its own dedicated animation
-  // (specialHigh), active window timed to when the sheet's own impact FX
-  // actually shows the kick connecting. Dodged the same way the bolt is
-  // (crouch or jump both clear it) since unlike the free universal
-  // uppercut, this isn't meant to be an anti-air counter.
-  function checkBuilderSpecialHit(attacker, defender) {
-    if (attacker.state !== "specialHigh") return;
-    if (attacker.stateT < BUILDER_SPECIAL.activeStart || attacker.stateT > BUILDER_SPECIAL.activeEnd) return;
-    if (attacker.hasHit) return;
-    // isAirborne() - same reasoning as checkHit/updateSlide above, a
-    // grounded special can't reach someone genuinely off the ground (jump,
-    // juggle, or their own air attack). blockLow added alongside plain
-    // crouch - a crouching hurtbox ducks this the same way plain crouch
-    // always did, regardless of whether a guard happens to be raised too.
-    if (defender.state === "crouch" || defender.state === "blockLow" || isAirborne(defender.state)) return;
-    const attackerCenterX = attacker.x + BODY_CENTER_OFFSET;
-    const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
-    if (Math.abs(attackerCenterX - defenderCenterX) >= BUILDER_SPECIAL.range) return;
-
-    attacker.hasHit = true;
-    defender.takeDamage(attacker.builderSpecialDamage, attacker.x, "special");
-    attacker.onLandedHit("special");
-    attacker.lastEvent = "special-hit";
-    shake = Math.max(shake, SHAKE_ON_SPECIAL);
-    flash = Math.max(flash, FLASH_ON_HIT);
-    triggerHitstop(attacker.builderSpecialDamage);
-    spawnHitEffects(defender, { x: attacker.x, state: "uppercut" });
-  }
-
-  // Hodler's special - a close ground sweep with its own dedicated
-  // animation (specialLow), only dodged by a jump (same rule as the rat
-  // rush - it's already at ground level, ducking doesn't get you out of its
-  // way). See takeDamage's isHolding check for how this also blocks
-  // whatever the opponent throws back during the same window, and
-  // updateSlide above for how it stops a slide dead instead of trading.
-  function checkHodlerSpecialHit(attacker, defender) {
-    if (attacker.state !== "specialLow") return;
-    if (attacker.stateT < HODLER_SPECIAL.activeStart || attacker.stateT > HODLER_SPECIAL.activeEnd) return;
-    if (attacker.hasHit) return;
-    // isAirborne() - same reasoning as every other grounded-attack
-    // exclusion above.
-    if (isAirborne(defender.state)) return;
-    const attackerCenterX = attacker.x + BODY_CENTER_OFFSET;
-    const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
-    if (Math.abs(attackerCenterX - defenderCenterX) >= HODLER_SPECIAL.range) return;
-
-    attacker.hasHit = true;
-    defender.takeDamage(attacker.hodlerSpecialDamage, attacker.x, "special");
-    attacker.onLandedHit("special");
-    attacker.lastEvent = "special-hit";
-    shake = Math.max(shake, SHAKE_ON_SPECIAL);
-    flash = Math.max(flash, FLASH_ON_HIT);
-    triggerHitstop(attacker.hodlerSpecialDamage);
-    spawnHitEffects(defender, { x: attacker.x, state: "kick" });
-  }
-
   function handleSounds(fighter) {
     switch (fighter.lastEvent) {
       case "punch-hit":
@@ -1349,8 +1354,21 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
           rate: fighter.lastEvent === "special-hit" ? 0.75 : fighter.lastEvent === "uppercut-hit" ? 1.3 : fighter.lastEvent === "air-attack-hit" ? 1.15 : 1,
         });
         break;
+      // Ground finisher (requirement 9) - the biggest single committed
+      // payoff hit in any kit deserves a heavier, lower-pitched cue than an
+      // ordinary kick, same "no dedicated thud sample, reuse an existing
+      // clip at a heavier rate" convention punch-down-hit/hard-knockdown-land
+      // above already use.
+      case "finisher-hit":
+        playSound("kick", { rate: 0.7 });
+        break;
+      // The lunge/commit beat when a finisher actually fires (see fighter.js's
+      // arm-window branch) - same pitched-up "committing to a big anti-air-
+      // shaped move" cue uppercut-start/air-attack-start below already use.
+      case "finisher-start":
+        playSound("jump", { rate: 0.7 });
+        break;
       case "block-taken":
-      case "slide-stopped":
         playSound("block");
         break;
       case "hit-taken":
@@ -1501,14 +1519,13 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     }
 
     // Hitstop freeze - the instant a hit landed (see triggerHitstop, called
-    // from every checkHit/updateSlide/checkUppercutHit/checkBuilderSpecialHit/
-    // checkHodlerSpecialHit/updateProjectiles hit branch above), both
-    // fighters, projectiles, blood FX, and the round clock all hold dead
-    // still for a few frames before knockback/hitstun actually starts
-    // playing - `frame` itself doesn't advance and neither does the
-    // once-per-60-frames timer tick below, so hitstop truly doesn't cost the
-    // clock any time. shake/flash are drawn at whatever their current value
-    // is but deliberately NOT decayed here, so the screen holds at the
+    // from every checkHit/updateSlide/checkUppercutHit/updateProjectiles hit
+    // branch above), both fighters, projectiles, blood FX, and the round
+    // timer all hold dead still for a few frames before knockback/hitstun
+    // actually starts playing - `frame` itself doesn't advance and neither
+    // does the once-per-60-frames timer tick below, so hitstop truly
+    // doesn't cost the clock any time. shake/flash are drawn at whatever
+    // their current value is but deliberately NOT decayed here, so the screen holds at the
     // impact's peak for the whole freeze instead of fading out mid-stop.
     //
     // Input is still polled and fed to Fighter.tickInputOnly (edge-detection
@@ -1590,10 +1607,6 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     spawnProjectile(p2);
     spawnHomingProjectile(p1);
     spawnHomingProjectile(p2);
-    checkBuilderSpecialHit(p1, p2);
-    checkBuilderSpecialHit(p2, p1);
-    checkHodlerSpecialHit(p1, p2);
-    checkHodlerSpecialHit(p2, p1);
     updateProjectiles();
     // Keep both fighters facing each other regardless of which physical
     // side they're actually standing on - computed last, after every move
@@ -1609,8 +1622,8 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     }
     // Reacts to comboCount's own current value rather than any one hit-check
     // call site, so it can't miss a hit landed via checkHit/checkUppercutHit/
-    // checkBuilderSpecialHit/checkHodlerSpecialHit/updateSlide/
-    // updateProjectiles - whichever move actually did the chaining.
+    // updateSlide/updateProjectiles - whichever move actually did the
+    // chaining.
     maybeBarkCombo(p1, "p1", "p2");
     maybeBarkCombo(p2, "p2", "p1");
     // Bark bubbles age down like every other hitstop-adjacent timer here

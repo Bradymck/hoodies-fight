@@ -97,9 +97,12 @@ const SHEETS = {
   // Post-match victory pose - only ever entered externally by game.js when
   // a round ends, never by player input.
   flex: { img: loadImg("assets/sprites/flex.png"), frameSize: 78 },
-  // Builder/Hodler's dedicated melee specials (see fighter.js's
-  // specialHigh/specialLow states) - a real high/low kick each, instead of
-  // sharing the ranged-cast "spellcast" pose every other archetype uses.
+  // Formerly Builder/Hodler's own dedicated melee-special sheets - both
+  // archetypes now share the plain ranged-cast "spellcast" pose instead (see
+  // fighter.js's stage-3 archetype-specials rework). Kept here wholesale,
+  // not deleted - the kick chain's own ender (kick3) and the free crouch
+  // kick (crouchKick) already repurposed these two sheets as real move art
+  // of their own back in stage 2 (see ANIMS.kick3/ANIMS.crouchKick below).
   specialHigh: { img: loadImg("assets/sprites/special-high.png"), frameSize: 78 },
   specialLow: { img: loadImg("assets/sprites/special-low.png"), frameSize: 68 },
 };
@@ -186,6 +189,12 @@ const HEAD_ANCHORS = {
 HEAD_ANCHORS.kick3 = HEAD_ANCHORS.specialHigh;
 // crouchKick reuses specialLow's own sheet the same way.
 HEAD_ANCHORS.crouchKick = HEAD_ANCHORS.specialLow;
+// Ground finisher (requirement 9) - finisherPunch reuses punchDown's own
+// sheet wholesale, finisherKick reuses kick2's own highKick sheet wholesale
+// (see ANIMS.finisherPunch/ANIMS.finisherKick above) - same live-reference
+// copy pattern as kick3/crouchKick just above, not a re-sample.
+HEAD_ANCHORS.finisherPunch = HEAD_ANCHORS.punchDown;
+HEAD_ANCHORS.finisherKick = HEAD_ANCHORS.kick2;
 
 // Head art is always drawn upright by default (fine for every standing/
 // crouching pose) - but the death collapse actually tips the body over from
@@ -260,11 +269,23 @@ const ANIMS = {
   // much longer the post-match display runs - not looped, so it doesn't
   // visibly crouch back down and repeat mid-celebration.
   flex: { sheet: "flex", frames: 8, durationFrames: 40, loop: false },
-  // durationFrames (45)/(28) match BUILDER_SPECIAL.duration/HODLER_SPECIAL.duration
-  // in fighter.js - active-hitbox window (game.js) is timed to whichever
-  // frames the sheet's own impact FX actually shows the kick connecting.
-  specialHigh: { sheet: "specialHigh", frames: 15, durationFrames: 45, loop: false },
-  specialLow: { sheet: "specialLow", frames: 7, durationFrames: 28, loop: false },
+  // Builder/Hodler's own dedicated "specialHigh"/"specialLow" MOVE STATES are
+  // gone (stage 3, requirement 6 - see fighter.js's own archetype-specials
+  // rework comment) - every archetype now shares the plain "special" ranged-
+  // cast pose above instead. The two SHEETS themselves stay in SHEETS above
+  // wholesale (kick3/crouchKick, stage 2, already repurposed them as real
+  // move art of their own - see those two ANIMS entries above), just with no
+  // ANIMS entry of their own left pointing a STATE at them anymore.
+  //
+  // Ground finisher (requirement 9) - a "get over here" gap-close + slam
+  // move, only reachable while an opponent is mid-juggle (see JUGGLE_FINISHER
+  // and the arm-window entry in fighter.js's update()). No new art needed:
+  // finisherPunch reuses the same punchDown sheet the aerial chain's own
+  // finisher/free crouch punch already share (a two-handed downward slam
+  // reads fine as this move's payoff too), finisherKick reuses kick2's
+  // highKick sheet. durationFrames match JUGGLE_FINISHER.duration exactly.
+  finisherPunch: { sheet: "punchDown", frames: 8, durationFrames: 34, loop: false },
+  finisherKick: { sheet: "highKick", frames: 8, durationFrames: 34, loop: false },
   // Crouching guard (fighter.js's "blockLow" state, entered by holding
   // block+crouch together - see the high/low guard mixup in its takeDamage).
   // The engine this was ported from wires this into a dedicated art still;
@@ -379,18 +400,21 @@ export function drawFighter(ctx, fighter, playerNum) {
   // the plain crouch pose does below, or it'd render at the wrong scale
   // relative to every other pose despite drawing off identical pixels.
   const isCrouch = state === "crouch" || state === "blockLow";
-  // Crouch, specialLow, and ko all scale the body around the same bottom-
+  // Crouch, crouchKick, and ko all scale the body around the same bottom-
   // center pivot (crouch shrinks, the other two grow) - see the comments on
   // SPECIAL_LOW_EXTRA_SCALE/DEATH_EXTRA_SCALE above for why. null means "no
   // correction needed". Folded into one shared branch (rather than a
   // separate one for ko) so the head-anchor pivot correction below - which
   // keys off this same variable - automatically covers ko too now that the
   // head is drawn for it.
-  // "crouchKick" (fighter.js's free crouch kick, stage 2) reuses the
-  // specialLow SHEET wholesale (see ANIMS.crouchKick above) - it needs this
-  // exact same correction for the exact same reason, drawing off the
-  // identical underfilled-frame art specialLow itself does.
-  const extraScale = isCrouch ? CROUCH_EXTRA_SCALE : state === "specialLow" || state === "crouchKick" ? SPECIAL_LOW_EXTRA_SCALE : state === "ko" ? DEATH_EXTRA_SCALE : null;
+  // "crouchKick" (fighter.js's free crouch kick, stage 2) reuses the old
+  // specialLow SHEET wholesale (see ANIMS.crouchKick above, and SHEETS'
+  // own comment on why that sheet is kept around despite the specialLow
+  // MOVE STATE itself being gone as of stage 3) - it needs this exact same
+  // correction, drawing off the identical underfilled-frame art specialLow
+  // itself always did. There's no longer a literal "specialLow" STATE to
+  // check for directly (nothing ever sets fighter.state to it anymore).
+  const extraScale = isCrouch ? CROUCH_EXTRA_SCALE : state === "crouchKick" ? SPECIAL_LOW_EXTRA_SCALE : state === "ko" ? DEATH_EXTRA_SCALE : null;
 
   // The crouch source art draws the character filling notably more of its
   // frame than every other sheet (measured ~69% of frame width vs ~47% for
