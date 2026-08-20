@@ -80,6 +80,18 @@ const KEYMAP = {
   },
 };
 
+// A blocked punch/kick docks the ATTACKER's power instead of the old model
+// (real cost to even throw the swing, win or lose) - punch/kick/crouchPunch/
+// crouchKick/airPunch all cost 0 up front now (see PUNCH_CHAIN/KICK_CHAIN/
+// CROUCH_PUNCH/CROUCH_KICK/AIR_PUNCH_CHAIN in fighter.js), so a whiffed or
+// landed basic attack is free - only getting read and blocked actually costs
+// you anything. Matches BLOCK_POWER_GAIN's own value (fighter.js) so it reads
+// as a direct transfer: what the defender gains for guessing right, the
+// attacker loses for guessing wrong. punchDown/finisher/uppercut/slide/
+// special keep their own existing cost model unchanged - this only applies
+// to the basic punch/kick family checkHit/checkAirPunchHit gate it to below.
+const BLOCKED_PUNCH_KICK_POWER_LOSS = 10;
+
 const SHAKE_ON_HIT = 6;
 const SHAKE_ON_SPECIAL = 12;
 // Combo-ender escalation - clearly bigger than either baseline above, but not
@@ -856,6 +868,15 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         attacker.applyParryStagger();
         playSound("block", { rate: 1.4 });
         announceBark(defender === p1 ? "p1" : "p2", "PERFECT PARRY!");
+      } else if (defender.lastEvent === "block-taken" && (box.kind === "punch" || box.kind === "kick" || box.kind === "crouchKick")) {
+        // Punch/kick are free to throw now (see BLOCKED_PUNCH_KICK_POWER_LOSS
+        // above) - a blocked one docks the attacker instead of the usual
+        // onLandedHit gain, so getting read actually costs something without
+        // taxing the basic attack itself. Deliberately narrower than "any
+        // blocked hit" - slide/uppercut/special/finisher keep their own
+        // existing upfront-cost model untouched.
+        attacker.power = Math.max(0, attacker.power - BLOCKED_PUNCH_KICK_POWER_LOSS);
+        attacker.lastEvent = `${box.kind}-hit`;
       } else {
         attacker.onLandedHit(box.kind);
         // box.kind, not attacker.state - kept as box.kind (rather than the
@@ -1153,6 +1174,13 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       attacker.applyParryStagger();
       playSound("block", { rate: 1.4 });
       announceBark(defender === p1 ? "p1" : "p2", "PERFECT PARRY!");
+    } else if (defender.lastEvent === "block-taken" && kind === "airPunch") {
+      // Same free-to-throw/costs-you-if-blocked model checkHit applies to the
+      // grounded punch/kick family (see BLOCKED_PUNCH_KICK_POWER_LOSS above) -
+      // punchDown (the finisher) is deliberately excluded, same reasoning as
+      // its own cost staying non-zero in AIR_PUNCH_CHAIN.
+      attacker.power = Math.max(0, attacker.power - BLOCKED_PUNCH_KICK_POWER_LOSS);
+      attacker.lastEvent = "air-punch-hit";
     } else {
       attacker.onLandedHit(kind);
       attacker.lastEvent = kind === "punchDown" ? "punch-down-hit" : "air-punch-hit";

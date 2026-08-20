@@ -58,10 +58,15 @@ const PUNCH_CHAIN_BY_STATE = Object.fromEntries(PUNCH_CHAIN.map((move) => [move.
 // into a hard knockdown instead of continuing it (see checkAirPunchHit in
 // game.js, which calls applyJuggleSpike on a landed punchDown against an
 // already-juggled defender - requirement 2's "slam ends the juggle").
+// airPunch1-3 costs zeroed (were 8/8/10) - same reasoning as KICK_CHAIN below:
+// ordinary punches/kicks (grounded or airborne) shouldn't drain the meter
+// just to throw them, only a block should cost the attacker anything (see
+// checkAirPunchHit in game.js). punchDown keeps its own cost - it's the
+// ender-tier finisher, not a basic poke, same category as UPPERCUT/SLIDE.
 export const AIR_PUNCH_CHAIN = [
-  { state: "airPunch1", duration: 16, activeStart: 4, activeEnd: 11, damage: 5, range: 85, cost: 8 },
-  { state: "airPunch2", duration: 16, activeStart: 4, activeEnd: 11, damage: 5, range: 88, cost: 8 },
-  { state: "airPunch3", duration: 16, activeStart: 4, activeEnd: 11, damage: 6, range: 88, cost: 10 },
+  { state: "airPunch1", duration: 16, activeStart: 4, activeEnd: 11, damage: 5, range: 85, cost: 0 },
+  { state: "airPunch2", duration: 16, activeStart: 4, activeEnd: 11, damage: 5, range: 88, cost: 0 },
+  { state: "airPunch3", duration: 16, activeStart: 4, activeEnd: 11, damage: 6, range: 88, cost: 0 },
   { state: "punchDown", duration: 20, activeStart: 6, activeEnd: 13, damage: 10, range: 90, cost: 15 },
 ];
 // Free, always-available low poke - fold of the old "specialLow"-shaped idea
@@ -90,10 +95,16 @@ export const CHAIN_RESET_FRAMES = 30;
 // cost of 20 across three progressively pricier hits - 15+12+18 - rather
 // than each hit costing the full 20) - kick stays this engine's power-gated
 // striker, chain or no chain.
+// Costs zeroed (were 15/12/18) - kick used to be the one basic attack that
+// drained real power just to throw, inconsistent with PUNCH_CHAIN's already-
+// free model right above and with real fighting games, where a whiffed or
+// landed jab/kick doesn't cost meter, only a BLOCKED one gives anything up
+// (see checkHit in game.js, which now docks the attacker's power on a
+// blocked punch/kick instead of charging it upfront here).
 export const KICK_CHAIN = [
-  { state: "kick", duration: 34, activeStart: 10, activeEnd: 22, damage: 8, range: 84, cost: 15 },
-  { state: "kick2", duration: 26, activeStart: 8, activeEnd: 18, damage: 9, range: 96, cost: 12 },
-  { state: "kick3", duration: 34, activeStart: 16, activeEnd: 27, damage: 12, range: 90, cost: 18 },
+  { state: "kick", duration: 34, activeStart: 10, activeEnd: 22, damage: 8, range: 84, cost: 0 },
+  { state: "kick2", duration: 26, activeStart: 8, activeEnd: 18, damage: 9, range: 96, cost: 0 },
+  { state: "kick3", duration: 34, activeStart: 16, activeEnd: 27, damage: 12, range: 90, cost: 0 },
 ];
 // Same reasoning as PUNCH_CHAIN_BY_STATE above - attackHitbox()/the cancel
 // machinery need "given the current state, which chain entry is this" far
@@ -298,7 +309,15 @@ export const KICK_POSES = ["kick", "kick2", "kick3"];
 // through each other horizontally while either is airborne, so this is what
 // makes "jump over them" a real, usable option instead of just a dodge.
 const JUMP_DURATION = 48;
-const JUMP_HEIGHT = 140;
+// Raised from 140 - measured against JUGGLE_LAUNCH_VELOCITY/JUGGLE_GRAVITY's
+// own peak (15^2 / (2*0.55) =~ 204), a jump-follow chasing a freshly-launched
+// opponent topped out ~57px below where they actually floated, so the two
+// never visually "hung together" the way a real air combo should - the
+// attacker looked like they were hopping while the defender soared. 195
+// brings the jumper's own peak close to the juggle's, without exceeding it
+// (so a juggled opponent still reads as genuinely higher/more vulnerable at
+// the very top of a fresh launch).
+const JUMP_HEIGHT = 195;
 // Ground-closing move: moves forward on its own the whole time it's active
 // (see updateSlide in game.js) rather than reading movement input. Exported
 // (along with UPPERCUT below) since game.js's updateSlide/checkUppercutHit

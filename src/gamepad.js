@@ -45,9 +45,15 @@ export const REMAPPABLE_ACTIONS = ["jump", "uppercut", "block", "punch", "kick",
 // actually hold for the ground finisher's arm-window chord (see JUGGLE_
 // FINISHER in fighter.js) - a stick click is awkward to hold through a
 // follow-up punch/kick press, a trigger isn't.
+// jump/uppercut swapped from the previous A=uppercut/LT=jump layout - a
+// fighting-game player's own instinct is A=jump (matches nearly every other
+// genre too), and LT is an awkward, easy-to-miss reach for something thrown
+// as often as jump is. Uppercut moves to LT instead - it's a deliberate,
+// occasional input (the launcher), not a rapid-fire one, so a trigger reach
+// fits it better than it ever fit jump.
 const DEFAULT_GAMEPAD_MAP = {
-  jump: 6, // LT
-  uppercut: 0, // A / Cross
+  jump: 0, // A / Cross
+  uppercut: 6, // LT
   block: 1, // B / Circle
   punch: 2, // X / Square
   kick: 3, // Y / Triangle
