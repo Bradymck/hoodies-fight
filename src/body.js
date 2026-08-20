@@ -66,6 +66,11 @@ const SHEETS = {
   idle: { img: loadImg("assets/sprites/idle.png"), frameSize: 78 },
   walk: { img: loadImg("assets/sprites/walk.png"), frameSize: 86 },
   kick: { img: loadImg("assets/sprites/kick.png"), frameSize: 86 },
+  // The kick chain's 2nd hit (fighter.js's "kick2" state, KICK_CHAIN) - a
+  // dedicated high-kick sheet. The chain's 3rd hit (kick3) doesn't need a
+  // sheet of its own here - it reuses specialHigh below wholesale (see
+  // ANIMS.kick3's own comment).
+  highKick: { img: loadImg("assets/sprites/high-kick.png"), frameSize: 86 },
   // The 3-hit punch chain's own dedicated sheets (fighter.js's punch1/
   // punch2/punch3 states) - the old single "attack" sheet is gone, replaced
   // by real per-hit art. elbow doubles as the aerial chain's OPENER
@@ -110,6 +115,11 @@ const HEAD_ANCHORS = {
   idle: [{"x":37.8,"y":-7},{"x":37.8,"y":-7},{"x":37.8,"y":-7},{"x":38.3,"y":-7},{"x":38.8,"y":-7},{"x":38.8,"y":-7},{"x":38.5,"y":-7},{"x":37.8,"y":-7}],
   walk: [{"x":40.9,"y":6},{"x":42.5,"y":5},{"x":41.4,"y":4},{"x":42.1,"y":3},{"x":40.5,"y":5},{"x":40.9,"y":6},{"x":42.2,"y":4},{"x":41.8,"y":3}],
   kick: [{"x":42.0,"y":2},{"x":41.1,"y":3},{"x":39.8,"y":3},{"x":33.8,"y":3},{"x":43.5,"y":1},{"x":40.7,"y":-2},{"x":45.7,"y":5},{"x":42.3,"y":2}],
+  // kick2 - new 8-frame high-kick sheet, seeded from kick's own anchor
+  // points above (same rough head-follows-strike shape a kick always had),
+  // same first-pass-placeholder treatment the new punch sheets below got in
+  // stage 1 - not hand-tuned per sheet yet.
+  kick2: [{"x":42.0,"y":2},{"x":41.1,"y":3},{"x":39.8,"y":3},{"x":33.8,"y":3},{"x":43.5,"y":1},{"x":40.7,"y":-2},{"x":45.7,"y":5},{"x":42.3,"y":2}],
   // New 8-frame punch-chain sheets - seeded from the old "attack" sheet's
   // own anchor points (same rough head-follows-swing shape a punch always
   // had) rather than a flat/centered guess, since the new art shares the
@@ -169,6 +179,13 @@ const HEAD_ANCHORS = {
   // the neck in every frame) instead of raw silhouette height.
   death: [{"x":11.6,"y":10.9},{"x":10.6,"y":12.9},{"x":7.3,"y":24.3},{"x":8.3,"y":33.4},{"x":8.4,"y":38.6},{"x":9.0,"y":40.0},{"x":8.8,"y":42.4},{"x":8.5,"y":43.0}],
 };
+// kick3 reuses specialHigh's own sheet wholesale (see ANIMS.kick3 above) -
+// same frames, so its head anchors are copied verbatim (a live reference,
+// not a duplicated second copy of the same 15-point array that could drift
+// out of sync with it) rather than re-sampled.
+HEAD_ANCHORS.kick3 = HEAD_ANCHORS.specialHigh;
+// crouchKick reuses specialLow's own sheet the same way.
+HEAD_ANCHORS.crouchKick = HEAD_ANCHORS.specialLow;
 
 // Head art is always drawn upright by default (fine for every standing/
 // crouching pose) - but the death collapse actually tips the body over from
@@ -200,6 +217,21 @@ const ANIMS = {
   punch2: { sheet: "punchCross", frames: 8, durationFrames: 22, loop: false },
   punch3: { sheet: "elbow", frames: 8, durationFrames: 24, loop: false },
   kick: { sheet: "kick", frames: 8, durationFrames: 34, loop: false },
+  // The 3-hit standing kick chain's own remaining two hits (fighter.js's
+  // KICK_CHAIN) - kick2 gets a dedicated new sheet (highKick), kick3 reuses
+  // Builder's old specialHigh sheet wholesale as the chain's flourish ender
+  // (see checkHit's own kick3-specific FX branch in game.js) rather than
+  // needing new art of its own - a real 15-frame animation "for free".
+  // durationFrames match each KICK_CHAIN entry's own `duration`.
+  kick2: { sheet: "highKick", frames: 8, durationFrames: 26, loop: false },
+  kick3: { sheet: "specialHigh", frames: 15, durationFrames: 34, loop: false },
+  // Free, always-available crouch kick (fighter.js's CROUCH_KICK) - reuses
+  // Hodler's old specialLow sheet wholesale, same "borrow an existing sheet
+  // for a new state" move kick3 above makes. durationFrames matches
+  // CROUCH_KICK.duration, not the old HODLER_SPECIAL.duration it happens to
+  // share a value with today - see CROUCH_KICK's own comment in fighter.js
+  // for why these are deliberately separate numbers, not a shared reference.
+  crouchKick: { sheet: "specialLow", frames: 7, durationFrames: 28, loop: false },
   // durationFrames (30) matches SPECIAL.release in fighter.js exactly, so
   // the cast finishes on the sheet's last (fullest-charge) frame right as
   // the projectile fires - frameIndex clamps to that last frame for the
@@ -354,7 +386,11 @@ export function drawFighter(ctx, fighter, playerNum) {
   // separate one for ko) so the head-anchor pivot correction below - which
   // keys off this same variable - automatically covers ko too now that the
   // head is drawn for it.
-  const extraScale = isCrouch ? CROUCH_EXTRA_SCALE : state === "specialLow" ? SPECIAL_LOW_EXTRA_SCALE : state === "ko" ? DEATH_EXTRA_SCALE : null;
+  // "crouchKick" (fighter.js's free crouch kick, stage 2) reuses the
+  // specialLow SHEET wholesale (see ANIMS.crouchKick above) - it needs this
+  // exact same correction for the exact same reason, drawing off the
+  // identical underfilled-frame art specialLow itself does.
+  const extraScale = isCrouch ? CROUCH_EXTRA_SCALE : state === "specialLow" || state === "crouchKick" ? SPECIAL_LOW_EXTRA_SCALE : state === "ko" ? DEATH_EXTRA_SCALE : null;
 
   // The crouch source art draws the character filling notably more of its
   // frame than every other sheet (measured ~69% of frame width vs ~47% for

@@ -763,6 +763,24 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       flash = Math.max(flash, defender.lastComboEnder ? FLASH_ON_ENDER : FLASH_ON_HIT);
       triggerHitstop(box.damage, defender.lastEvent === "hit-taken" || defender.lastEvent === "ko" ? defender.comboCount : 1);
       if (!wasBlocking) spawnHitEffects(defender, attacker);
+      // kick3 flourish - the ground kick chain's ender (reusing Builder's
+      // old specialHigh sheet, see body.js's ANIMS.kick3) needs to read as a
+      // real payoff hit, not just the third ordinary kick in a row. box.kind
+      // alone can't tell kick3 apart from kick/kick2 (all three report the
+      // same generic "kick", see attackHitbox above), so this checks
+      // attacker.state directly, same pattern the contact-height branch in
+      // spawnHitEffects already uses. "kick" isn't in fighter.js's
+      // ENDER_KINDS, so a pure kick string never earns the bigger
+      // SHAKE_ON_ENDER/energy-burst treatment through the normal combo-ender
+      // path the way punchDown/uppercut/slide/special do - this gives kick3
+      // specifically a bit of that same weight inline instead, the same
+      // shake bump and impact burst every archetype special already gets
+      // (checkBuilderSpecialHit/checkHodlerSpecialHit below), reusing the
+      // existing energy-burst FX rather than adding new art.
+      if (!wasBlocking && attacker.state === "kick3") {
+        shake = Math.max(shake, SHAKE_ON_SPECIAL);
+        impacts.push({ x: defender.x + BODY_CENTER_OFFSET, y: GROUND_Y - 20, t: 0 });
+      }
     }
   }
 
@@ -1318,6 +1336,11 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         playSound("punch", { rate: 0.8 });
         break;
       case "kick-hit":
+      // crouchKick reports its own "crouchKick" kind (see attackHitbox in
+      // fighter.js), so it produces its own "crouchKick-hit" lastEvent
+      // rather than falling into the generic "kick-hit" case above - reuses
+      // the same kick clip at the plain rate, same as a standing kick.
+      case "crouchKick-hit":
       case "special-hit":
       case "slide-hit":
       case "uppercut-hit":
@@ -1534,10 +1557,9 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
 
     const p1Gamepad = findGamepad();
     const p2Gamepad = findGamepad(p1Gamepad ? p1Gamepad.index : -1);
-    // opponent passed through purely for pickKickState/pickAirAttackState's
-    // own cosmetic pose choice (see fighter.js) - never read for hit
-    // detection, which stays entirely in checkHit/etc below, run after both
-    // updates.
+    // opponent passed through purely for pickAirAttackState's own cosmetic
+    // pose choice (see fighter.js) - never read for hit detection, which
+    // stays entirely in checkHit/etc below, run after both updates.
     p1.update(withGamepad(readInput(KEYMAP.p1), p1Gamepad), p2);
     p2.update(practiceMode ? emptyP2Input : getAIInput ? getAIInput() : withGamepad(readInput(KEYMAP.p2), p2Gamepad), p1);
     // The dummy tops back up to full once it's recovered from the last
