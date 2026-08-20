@@ -458,6 +458,27 @@ async function selectFighter(side, tokenId, token) {
   }
 }
 
+// Every field on a token (image URL, trait names, the fighter's display
+// name) comes straight from the OnChainHoodies REST API or, on API
+// downtime, the on-chain tokenURI fallback in chain.js - neither is a
+// source we control, so a malicious collection/token could hand back
+// crafted strings instead of the plain image URLs/trait labels this UI
+// expects. img.src is a property assignment (not HTML parsing) so it can't
+// smuggle markup, but a `javascript:`/`data:text/html`-style scheme could
+// still turn a rendered <img> into a script gadget in some browsers -
+// restricting to the schemes OnChainHoodies actually returns (https, or a
+// data:image URI for the on-chain SVG fallback) closes that off without
+// needing to know anything else about the string. http:// is deliberately
+// NOT allowed here even though it'd be equally safe against the script-
+// gadget risk above - this whole site is served over https, and a mixed-
+// content image load is its own (much smaller, but free to just avoid)
+// problem.
+function isSafeImageUrl(url) {
+  if (typeof url !== "string") return false;
+  const trimmed = url.trim().toLowerCase();
+  return trimmed.startsWith("https://") || trimmed.startsWith("data:image/");
+}
+
 async function renderPanel(side) {
   const state = panelState[side];
   const grid = side === "p1" ? p1Grid : p2Grid;
@@ -488,11 +509,30 @@ async function renderPanel(side) {
     card.dataset.tokenId = id;
     card.tabIndex = 0;
     if (state.selectedId === id) card.classList.add("selected");
-    card.innerHTML = `
-      <img src="${token.image?.svg ?? ""}" alt="${type}" />
-      <div class="card-label">${type}</div>
-      ${info ? `<div class="card-badge">${info.emoji}</div>` : ""}
-    `;
+    // Built with real DOM nodes + property/textContent assignment rather
+    // than an innerHTML template - `type` and the image URL above are
+    // untrusted token metadata (see isSafeImageUrl's comment), and this way
+    // they're only ever readable as text/an image resource, never parsed
+    // as markup, no matter what a hostile token throws at them.
+    const img = document.createElement("img");
+    // An empty string src (`src=""`) re-requests the CURRENT page URL, not
+    // "no image" - omitting the attribute entirely is the actual no-op.
+    if (isSafeImageUrl(token.image?.svg)) img.src = token.image.svg;
+    img.alt = type;
+    card.appendChild(img);
+
+    const labelEl = document.createElement("div");
+    labelEl.className = "card-label";
+    labelEl.textContent = type;
+    card.appendChild(labelEl);
+
+    let badgeEl = null;
+    if (info) {
+      badgeEl = document.createElement("div");
+      badgeEl.className = "card-badge";
+      badgeEl.textContent = info.emoji;
+      card.appendChild(badgeEl);
+    }
     card.addEventListener("click", () => selectFighter(side, id, token));
     card.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
@@ -500,7 +540,7 @@ async function renderPanel(side) {
         card.click();
       }
     });
-    if (info) attachBadgeTooltip(card.querySelector(".card-badge"), archetypeTooltip(type, rareTraitCount));
+    if (info) attachBadgeTooltip(badgeEl, archetypeTooltip(type, rareTraitCount));
     grid.appendChild(card);
   });
 
@@ -580,8 +620,16 @@ async function startMatch(data1, data2, opts) {
   fitArenaCanvas();
   document.getElementById("p1-name").textContent = `${data1.name} (${data1.hoodieType})`;
   document.getElementById("p2-name").textContent = `${data2.name} (${data2.hoodieType})`;
-  document.getElementById("p1-pfp").src = data1.avatarUrl;
-  document.getElementById("p2-pfp").src = data2.avatarUrl;
+  // avatarUrl is loadFighterData's raw, unprocessed token.image.svg (see
+  // its own comment in api.js on why that's kept separate from the
+  // canvas-cropped imageUrl) - still the same untrusted OnChainHoodies/
+  // on-chain field as the select-screen cards, so it gets the same scheme
+  // check before landing on an actual <img>. removeAttribute, not src="" -
+  // an empty src re-requests the current page URL, it isn't a no-op.
+  const p1Pfp = document.getElementById("p1-pfp");
+  const p2Pfp = document.getElementById("p2-pfp");
+  if (isSafeImageUrl(data1.avatarUrl)) p1Pfp.src = data1.avatarUrl; else p1Pfp.removeAttribute("src");
+  if (isSafeImageUrl(data2.avatarUrl)) p2Pfp.src = data2.avatarUrl; else p2Pfp.removeAttribute("src");
   // Universal for any match, not just practice - a normal AI match had no
   // way to bail early either before this existed, only a post-match Back
   // to Menu button.
@@ -767,6 +815,7 @@ async function runMatch(data1, data2, canvas, ctx, { p2AI = false, practiceMode 
     // flourish to "a real player won", not the AI. A future real PvP lobby
     // would need a genuine per-side "is this a human, and which wallet"
     // concept instead of this shortcut.
+
     return showMatchOverActions(p2AI, matchWinner, matchLoser, matchWinner === p1, canvas, ctx, wins);
   }
 }

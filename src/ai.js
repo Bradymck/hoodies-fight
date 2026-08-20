@@ -3,7 +3,22 @@
 // game.js can drive an AI fighter through the identical update() path a
 // real player uses instead of needing a special case.
 
-import { SLIDE, UPPERCUT, PUNCH_POSES, KICK_POSES, CROUCH_LIGHT, CROUCH_MEDIUM, CROUCH_HEAVY, AIR_LIGHT, AIR_HEAVY, AIR_KICK_POSES } from "./fighter.js";
+import {
+  SLIDE,
+  UPPERCUT,
+  PUNCH_POSES,
+  KICK_POSES,
+  CROUCH_LIGHT,
+  CROUCH_MEDIUM,
+  CROUCH_HEAVY,
+  AIR_LIGHT,
+  AIR_MEDIUM,
+  AIR_HEAVY,
+  AIR_FINISHER,
+  AIR_KICK_POSES,
+  JUGGLE_FINISHER,
+  BURST_COST,
+} from "./fighter.js";
 
 // Every non-grounded-kick attack pose the defensive react-check below treats
 // as "hold back" material - standing Light/Heavy (PUNCH_POSES), both
@@ -31,6 +46,20 @@ const ENGAGE_RANGE = 95; // close the gap if farther than this
 const ATTACK_RANGE = 82; // attempt an attack once this close
 const SLIDE_REACT_RANGE = 220; // slide closes distance fast, so react to it from further out than a normal swing
 const UPPERCUT_REACT_RANGE = 110; // only worth anti-airing a jump that's actually closing in
+// fighter.js's own JUGGLE_SPIKE_MIN_HITS (isJuggleSpike there) - not
+// exported (only BURST_COST was worth adding to fighter.js's export list
+// for this pass), matched here as a plain literal instead. Reused below to
+// decide when a juggle sequence is deep enough to reach for an ender
+// (AIR_FINISHER/JUGGLE_FINISHER) instead of just extending it further.
+const JUGGLE_SPIKE_MIN_HITS = 3;
+// Small, offense-only launcher probability (see the offensive-uppercut
+// branch in decide() below) - every OTHER `input.uppercut` write in this
+// file is purely reactive (anti-air, or the blockLow-punish rung of the
+// ATTACK_RANGE ladder further down), so this is the one place the AI ever
+// throws it as a genuine opener. Deliberately low even at max difficulty -
+// this is meant to read as an occasional read that keeps the juggle system
+// two-sided, not a spammed launcher.
+const OFFENSIVE_UPPERCUT_CHANCE = 0.08;
 // Both reaction speed and every reactive/opportunistic probability below
 // scale off this - starts noticeably softer than the old fixed baseline (a
 // new player should be able to land real hits before the fight gets hard)
@@ -80,6 +109,55 @@ export function createAIController(self, opponent) {
     // now, so everywhere this AI used to just set input.block = true, it now
     // holds this direction instead.
     const awayFromOpponent = towardOpponent === "right" ? "left" : "right";
+
+    // Self-juggled escape (requirement 15's burst, fighter.js) - the ONLY
+    // way out of "juggled" is entirely input-driven: a genuine RISING EDGE
+    // of holding away from the opponent while airborne (fighter.js's own
+    // justPressed.block, derived from isHoldingBack in _trackInput), never
+    // a callable method - see BURST_COST/BURST_IMMUNITY_FRAMES/
+    // BURST_PUSHOUT's own comments there for the full mechanic. Checked
+    // first, ahead of every other reactive branch below - while
+    // self.state === "juggled", fighter.js's own "juggled" branch reads
+    // input ONLY for this one check (see its early return there), so every
+    // other flag this file could set (attacks, guard, uppercut) is
+    // completely inert anyway - nothing lost by returning immediately
+    // either way.
+    if (self.state === "juggled") {
+      if (self.power >= BURST_COST) {
+        // fighter.js's edge-detection compares THIS tick's held-back read
+        // against this.prevInput.block, which reflects whatever `input`
+        // was already doing on the last REAL frame before this decide()
+        // call runs - not just what the previous decide() call intended.
+        // If the AI was already holding away (e.g. it was mid-block
+        // against the very swing that launched it), setting the same
+        // direction again here is a no-op read to fighter.js (still
+        // "held", never a fresh press) and the burst attempt would
+        // silently do nothing. Leave this tick's press cleared instead
+        // (emptyInput() above already defaults both directions false) so
+        // the away flag reads false for at least one real frame -
+        // guaranteeing the NEXT think tick's attempt is a genuine rising
+        // edge fighter.js will actually honor. MAX_JUGGLE_FRAMES (150,
+        // fighter.js) comfortably outlasts even this file's own
+        // worst-case THINK_INTERVAL (up to ~57 frames at DIFFICULTY_MIN),
+        // so there's real room left for that retry.
+        if (!self.prevInput.block) {
+          // Real chance, not a guaranteed escape - keeps a juggle
+          // genuinely dangerous even against the AI (banking the power to
+          // afford this in the first place is only the first gate - see
+          // BURST_COST's own comment in fighter.js on why that's the
+          // ONLY real lever available). Scales with difficulty the same
+          // way every other reactive/opportunistic roll in this file
+          // already does - DIFFICULTY_MIN bursts rarely (a new player
+          // should be able to land a real juggle clean), DIFFICULTY_MAX
+          // bursts often (a beat-up AI fighting for its life escapes
+          // almost every time it can afford to).
+          if (Math.random() < 0.2 + 0.6 * difficulty) {
+            input[awayFromOpponent] = true;
+          }
+        }
+      }
+      return;
+    }
 
     // Jumping a slide is still the clean, zero-damage answer and gets first
     // crack at it - high odds (close to the only sane response), wide
@@ -133,6 +211,109 @@ export function createAIController(self, opponent) {
       } else if (opponent.state !== "special") {
         input[awayFromOpponent] = true;
       }
+      return;
+    }
+
+    // Opponent-juggled pursuit - the other side of the juggle system. A
+    // launched HUMAN opponent is real free damage sitting in the air and
+    // the old AI simply never followed up (no offensive uppercut anywhere,
+    // no aerial attacks at all - the AI would let every launch just fall
+    // back to the ground untouched). self.state === "juggled" already
+    // returned above, so reaching here means self is free to act.
+    if (opponent.state === "juggled") {
+      // Already airborne (either from this exact pursuit's own jump entry
+      // below on an earlier think tick, or incidentally from something
+      // else, e.g. dodging a slide) - the one moment an air attack can
+      // actually land on a juggled defender at all (checkAirAttackHit/
+      // checkAirPunchHit in game.js don't exclude an airborne target the
+      // way every grounded attack's own dodge logic already does - see
+      // HOLD_BACK_POSES's own comment above). Deliberately NOT combined
+      // with the jump press itself below in the same input object -
+      // fighter.js's BUFFERABLE_ACTIONS buffers only ONE action per real
+      // tick, checked in that array's own fixed order, and "jump" sits
+      // ahead of every attack button in it; a same-tick {jump:true,
+      // medium:true} would silently buffer only "jump" (a no-op - the
+      // fresh press already handles jump directly, see fighter.js's own
+      // neutral entry point) and the medium press would just never
+      // register, buffered or otherwise. Splitting into two separate
+      // think ticks - jump now (below), attack once self.state genuinely
+      // reads "jump" (here) - sidesteps that collision entirely.
+      if (self.state === "jump") {
+        const spiked = opponent.juggleHits >= JUGGLE_SPIKE_MIN_HITS;
+        if (spiked && self.power >= AIR_FINISHER.cost && Math.random() < 0.4) {
+          // AIR_FINISHER needs crouch HELD alongside a fresh Light press
+          // (see fighter.js's own crouch-gated check, right above the
+          // plain AIR_LIGHT entry) - setting both together here reads as
+          // exactly that combination.
+          input.crouch = true;
+          input.light = true;
+        } else {
+          // Mix the three real air buttons rather than only ever throwing
+          // the one air-kick move - keeps the pursuit from reading as a
+          // single deterministic string.
+          const roll = Math.random();
+          if (self.power >= AIR_MEDIUM.cost && roll < 0.5) {
+            // AIR_MEDIUM (airKick/flyingKick) - the move whose own
+            // comment in fighter.js calls out reaching a juggled defender
+            // as its entire purpose.
+            input.medium = true;
+          } else if (self.power >= AIR_HEAVY.cost && roll < 0.75) {
+            input.heavy = true;
+          } else if (self.power >= AIR_LIGHT.cost) {
+            input.light = true;
+          }
+        }
+        return;
+      }
+
+      // Grounded - the Heavy+Special hold fighter.js's own neutral branch
+      // reads as JUGGLE_FINISHER (a real "Scorpion pull" gap-closer that
+      // walks the attacker underneath the juggled target on its own, see
+      // that constant's own comment in fighter.js) fires straight off the
+      // ground, no jump needed at all - lean on it once the sequence is
+      // deep enough to actually afford ending it outright instead of
+      // always climbing into the air first. Both flags set together here,
+      // same as any other fresh offensive press in this file (both false
+      // the previous tick) - fighter.js's own simultaneous-press check
+      // fires the finisher immediately rather than arming its
+      // grace-window fallback.
+      if (opponent.juggleHits >= JUGGLE_SPIKE_MIN_HITS && self.power >= JUGGLE_FINISHER.cost && Math.random() < 0.3 * difficulty) {
+        input.heavy = true;
+        input.special = true;
+        return;
+      }
+
+      // Otherwise close the distance if needed - every air-attack range
+      // here (85-88, see AIR_LIGHT/AIR_MEDIUM/AIR_HEAVY above) clears
+      // MIN_FIGHTER_GAP with the same real margin every melee range in
+      // this file already does, same reasoning ATTACK_RANGE leans on -
+      // then commit to the jump that starts the airborne branch above on
+      // a later think tick, instead of idling while free damage floats
+      // overhead.
+      if (dist > ATTACK_RANGE) {
+        input[towardOpponent] = true;
+        return;
+      }
+      input.jump = true;
+      return;
+    }
+
+    // Offensive uppercut - every OTHER `input.uppercut` write in this file
+    // is purely reactive (the anti-air check above, or the blockLow-punish
+    // rung of the ATTACK_RANGE ladder further below); this is the one
+    // place the AI ever throws it as a genuine opener against a grounded,
+    // non-blocking opponent, so the launcher/juggle system stays
+    // two-sided instead of only ever punishing a human's own mistakes.
+    // Restricted to "idle"/"walk" specifically (not crouch/block/blockLow/
+    // any attack pose) - a real opening, not a read that happens to also
+    // catch a guard.
+    if (
+      dist < ATTACK_RANGE &&
+      self.power >= UPPERCUT.cost &&
+      (opponent.state === "idle" || opponent.state === "walk") &&
+      Math.random() < OFFENSIVE_UPPERCUT_CHANCE * difficulty
+    ) {
+      input.uppercut = true;
       return;
     }
 

@@ -20,6 +20,29 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+# Two rapid pushes to main start two runs of this workflow in parallel, and
+# GitHub does not guarantee they finish in the order they started - the
+# older run's `vercel deploy --prebuilt --prod` step can land AFTER the
+# newer one, silently serving stale code with no error anywhere. Cancelling
+# in-progress runs means a new trigger always supersedes whatever older run
+# is still building/deploying, so only the latest commit's build+attest+
+# deploy ever reaches production. This is safe to cancel mid-flight here
+# specifically because every step in this job is either idempotent (npm
+# install, vercel pull/build) or only takes effect once `vercel deploy`
+# completes (the attestation and deploy of a half-built output are simply
+# never produced/published) - there's no step here that leaves Vercel
+# production in a half-updated state if interrupted.
+#
+# Group is a fixed string, not keyed on github.ref - both triggers below
+# (a push to main, and a manual workflow_dispatch, which can be run from
+# any branch) deploy to the exact same Vercel production target regardless
+# of which ref kicked them off, so ref-scoping the group would let a manual
+# dispatch from a different branch race a push to main undetected - the
+# thing this guard exists to prevent, just via the other trigger.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
 permissions:
   contents: read
   id-token: write

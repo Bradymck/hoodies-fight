@@ -573,7 +573,11 @@ export const ENDER_PUSHOUT = 160;
 // EARLIER in the exchange (blocking/parrying banks real power - see
 // BLOCK_POWER_GAIN/PARRY_POWER_GAIN below - passive regen alone, 0.03/frame,
 // can't refill 40 power mid-combo).
-const BURST_COST = 40;
+// Exported (unlike most bare move constants in this file) so ai.js's own
+// self-juggled escape branch can gate its burst attempts on the exact same
+// power threshold this file checks below, instead of duplicating the
+// number as a magic literal that could silently drift out of sync.
+export const BURST_COST = 40;
 // Full damage immunity for this many real ticks after a successful burst -
 // covers the entire KNOCKBACK_DURATION (28) flight this same burst puts the
 // fighter into, plus a couple frames of margin, so landing back in
