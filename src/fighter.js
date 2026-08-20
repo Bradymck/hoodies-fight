@@ -1,5 +1,11 @@
 export const MOVE_SPEED = 3;
-export const MAX_HEALTH = 100;
+// Bumped from 100 (stage 5, requirement 13) - the direct lever for making
+// matches run ~30% longer without touching every single move's own damage
+// number individually. Health bars (game.js's updateHud) already render as a
+// ratio against this.maxHealth (itself MAX_HEALTH * archetype scaling, see
+// the constructor below), never a hardcoded 100, so this one change alone
+// stretches every fight out proportionally.
+export const MAX_HEALTH = 130;
 export const MAX_POWER = 100;
 
 // Canvas is 800 wide. `x` is a fighter's LEFT edge (see BODY_CENTER_OFFSET
@@ -121,7 +127,13 @@ export const CROUCH_KICK = { state: "crouchKick", duration: 28, activeStart: 20,
 // hardest-hitting jab. Exported (unlike every other bare constant in this
 // section) since game.js's updateProjectiles needs the number directly to
 // actually call setKnockbackMotion on a landed hit.
-export const SPECIAL = { duration: 42, release: 30, damage: 32, cost: 50, knockback: 110 };
+// damage trimmed 32 -> 22 (stage 5, requirement 13) - on the new 130-point
+// bar this still lands as the single biggest RANGED hit in any kit (~17% of
+// a bar) without also being the single biggest hit of ANY kind now that it
+// carries real knockback on top (requirement 7) - a pure damage number that
+// big alongside a real shove would have made it strictly better than
+// committing to the ground finisher for no added risk.
+export const SPECIAL = { duration: 42, release: 30, damage: 22, cost: 50, knockback: 110 };
 // Flat fallback only - real hitstun is scaled per-hit by computeHitstunFrames
 // below (see takeDamage). Kept around as the "hitstun" state's default in
 // the one case nothing set fighter.hitstunFrames yet.
@@ -187,6 +199,24 @@ const COMBO_DAMAGE_FLOOR = 0.25;
 // hitIndex is 1-based (1 = the combo's opening hit, unscaled).
 export function computeComboDamageScale(hitIndex) {
   return Math.max(COMBO_DAMAGE_FLOOR, Math.pow(COMBO_DAMAGE_DECAY, hitIndex - 1));
+}
+
+// Ender-only scaling floor (stage 5, requirement 13) - without this, the raw
+// 0.82^n decay above kills the whole POINT of committing to punchDown/the
+// ground finisher as a combo's payoff: a realistic jab -> uppercut -> 3-hit
+// air chain -> grab -> finisher string lands the finisher around hit #7-8,
+// where computeComboDamageScale alone would already be down near ~0.37x -
+// the "biggest hit in the game" (JUGGLE_FINISHER.damage 22) would land
+// SMALLER than an unscaled uppercut (10), not the payoff it's supposed to
+// be. Only these two ender kinds get the floor - every other hit in a string
+// (including the plain punchDown/finisher-less combo enders like uppercut/
+// slide/special) keeps the honest, uncapped decay, which is what already
+// prevents runaway strings elsewhere.
+const ENDER_SCALE_FLOOR = 0.6;
+const ENDER_SCALE_FLOOR_KINDS = new Set(["finisher", "punchDown"]);
+function computeDamageScale(hitIndex, kind) {
+  const scale = computeComboDamageScale(hitIndex);
+  return ENDER_SCALE_FLOOR_KINDS.has(kind) ? Math.max(scale, ENDER_SCALE_FLOOR) : scale;
 }
 
 // --- Combo freeze-hold + enders -------------------------------------------
@@ -557,7 +587,11 @@ const BURST_PUSHOUT = 140;
 // cost, it's landing recovery if it misses, so the resource price alone
 // doesn't need to be the sole deterrent the way it is for a safer grounded
 // poke.
-export const AIR_ATTACK = { duration: 16, activeStart: 5, activeEnd: 13, damage: 11, range: 88, cost: 18 };
+// damage trimmed 11 -> 8 (stage 5, requirement 13) - this is juggle FILLER,
+// it shouldn't out-damage a real grounded chain hit now that the health pool
+// is bigger and the finisher needs headroom to read as the biggest single
+// chunk of any string.
+export const AIR_ATTACK = { duration: 16, activeStart: 5, activeEnd: 13, damage: 8, range: 88, cost: 18 };
 export const AIR_KICK_POSES = ["airKick", "flyingKick"];
 // Plain list of just the state names - the combined jump/air-attack branch
 // of update() below needs this to recognize "is this fighter currently in
@@ -613,12 +647,14 @@ for (const move of AIR_PUNCH_CHAIN) AIR_ATTACK_STATE_DURATIONS[move.state] = mov
 // rather than a bigger number, so it doesn't need to cost as much as the
 // grounded special to stay balanced.
 //
-// damage (14) is a single hit - sized in the same low tier as AIR_ATTACK's
-// 11 and kick's opening chain hit (8, stage 2), rather than anywhere near
-// the grounded SPECIAL's 32. Same reasoning: the
-// payoff here is utility (tracks, reaches a juggled target, no positioning
-// required), not raw damage.
-export const AIR_SPECIAL = { damage: 14, cost: 30 };
+// damage (10, trimmed from 14 - stage 5, requirement 13) is a single hit -
+// sized in the same low tier as AIR_ATTACK's own (8) and kick's opening
+// chain hit (8, stage 2), rather than anywhere near the grounded SPECIAL's
+// (22, also trimmed this stage). Same reasoning: this move's own payoff is
+// now explicitly the GRAB (stage 3, requirement 8), not raw damage - it's
+// the tool that resets/extends a juggle, not a bigger hit than the moves
+// that build the juggle in the first place.
+export const AIR_SPECIAL = { damage: 10, cost: 30 };
 // Cumulative push applied on a landed homing hit - matches the same
 // "nudge, don't shove" magnitude every other special call site in game.js
 // already uses on a landed hit. Only ever applied to a GROUNDED target now
@@ -826,7 +862,12 @@ const PASSIVE_REGEN_PER_FRAME = 0.03; // ~1.8/sec at 60fps
 // finisher: 0 - same reasoning special already gives (the biggest, most
 // committed payoff move in any kit never self-refunds).
 const POWER_GAIN = { punch: 8, kick: 10, slide: 6, uppercut: 16, special: 0, airKick: 12, airPunch: 10, punchDown: 14, crouchPunch: 8, crouchKick: 8, finisher: 0 };
-const BLOCK_POWER_GAIN = 8;
+// Bumped 8 -> 10 (stage 5, requirement 12 polish) - feeds the stage-4 juggle
+// burst's own economy: BURST_COST is 40, so this means ~4 blocked strings
+// banks one full escape instead of 5, matching the plan's own "defense-
+// literate players escape, mashers don't" framing without making blocking
+// alone trivially refill a burst off a single exchange.
+const BLOCK_POWER_GAIN = 10;
 
 // --- Perfect parry ---------------------------------------------------------
 // "Just block"/parry pattern layered on top of ordinary block rather than
@@ -2343,7 +2384,11 @@ export class Fighter {
       // landing on a grounded hitstun defender.
       const wasChaining = this.state === "hitstun" || this.state === "knockback" || this.state === "juggled";
       this.comboCount = wasChaining ? this.comboCount + 1 : 1;
-      const scaledAmount = amount * computeComboDamageScale(this.comboCount);
+      // Ender scaling floor (stage 5, requirement 13) - finisher/punchDown
+      // use computeDamageScale (which applies ENDER_SCALE_FLOOR) instead of
+      // the raw computeComboDamageScale every other kind still uses
+      // unmodified - see that helper's own comment above for why.
+      const scaledAmount = amount * computeDamageScale(this.comboCount, kind);
       this.health -= scaledAmount;
       // Scaled per this exact hit's ALREADY-combo-scaled damage (see
       // computeHitstunFrames above) - read by the "hitstun" branch of

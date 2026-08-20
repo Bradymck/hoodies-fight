@@ -105,6 +105,13 @@ const SHEETS = {
   // of their own back in stage 2 (see ANIMS.kick3/ANIMS.crouchKick below).
   specialHigh: { img: loadImg("assets/sprites/special-high.png"), frameSize: 78 },
   specialLow: { img: loadImg("assets/sprites/special-low.png"), frameSize: 68 },
+  // Optional victory-showcase-only pose (stage 5, requirement 5) - a relaxed
+  // boxing guard idle loop, never entered by player input, only cycled into
+  // post-round alongside "flex"/"idle" (see VICTORY_POSES in game.js).
+  // Generated art confirmed present and correctly sliced (624px wide / 78px
+  // frameSize = exactly 8 frames) before wiring in here, per the plan's own
+  // "verify frame count before wiring into SHEETS" gotcha.
+  boxIdle: { img: loadImg("assets/sprites/boxing-idle.png"), frameSize: 78 },
 };
 
 // Per-frame neck/collar anchor points, sampled directly from each sheet's
@@ -163,6 +170,12 @@ const HEAD_ANCHORS = {
   uppercut: [{"x":38.9,"y":9},{"x":48.2,"y":-5},{"x":42.4,"y":-7}],
   // 8-frame crouch-into-flex victory pose - same sampling method.
   flex: [{"x":37.8,"y":-7},{"x":38.4,"y":-4},{"x":38.0,"y":5},{"x":38.0,"y":7},{"x":37.9,"y":7},{"x":41.3,"y":5},{"x":42.8,"y":-1},{"x":40.0,"y":-2}],
+  // Optional victory-showcase boxing-guard idle loop (stage 5, requirement
+  // 5) - a relaxed near-still stance, seeded from idle's own anchor points
+  // (same rough "barely moves frame to frame" shape a standing idle loop
+  // always has) as a first-pass placeholder, same treatment the stage 1/2
+  // punch/kick sheets got.
+  boxIdle: [{"x":37.8,"y":-7},{"x":37.8,"y":-7},{"x":37.8,"y":-7},{"x":38.3,"y":-7},{"x":38.8,"y":-7},{"x":38.8,"y":-7},{"x":38.5,"y":-7},{"x":37.8,"y":-7}],
   // 15-frame high-kick special (Builder) - windup/lean, kick, recovery.
   // Sampled the same way as every other multi-frame sheet; no fist/arm to
   // hijack it this time since it's a leg strike, values track the head/
@@ -269,6 +282,11 @@ const ANIMS = {
   // much longer the post-match display runs - not looped, so it doesn't
   // visibly crouch back down and repeat mid-celebration.
   flex: { sheet: "flex", frames: 8, durationFrames: 40, loop: false },
+  // Optional victory-showcase pose (stage 5, requirement 5) - loops
+  // seamlessly (unlike flex, which plays once and holds), cycled into
+  // post-round alongside flex/idle by game.js's endRound showcase, never
+  // entered by any player-input path.
+  boxIdle: { sheet: "boxIdle", frames: 8, cyclesPerSec: 1, loop: true },
   // Builder/Hodler's own dedicated "specialHigh"/"specialLow" MOVE STATES are
   // gone (stage 3, requirement 6 - see fighter.js's own archetype-specials
   // rework comment) - every archetype now shares the plain "special" ranged-
@@ -690,15 +708,29 @@ export function drawRatRush(ctx, x, y, frame, facing) {
 const ENERGY_BURST_SHEET = loadImg("assets/fx/energy-burst.png");
 const ENERGY_BURST_FRAME = 80;
 export const ENERGY_BURST_TOTAL_FRAMES = 5;
-const ENERGY_BURST_DRAW_SCALE = 1.6;
+// Trimmed 1.6 -> 0.7 (stage 5, requirement 14) - at the old scale this burst
+// drew at ~128px, comfortably bigger than the ~109px character it was
+// supposed to be attached to (limb-scale FX reads as landing ON the hit, not
+// dwarfing the fighter throwing it). ~56px now.
+const ENERGY_BURST_DRAW_SCALE = 0.7;
 
-export function drawEnergyBurst(ctx, x, y, frame) {
+// facing (stage 5, requirement 14) - optional, defaults to 1 (unflipped) so
+// any call site that doesn't have an obvious "which way was this hit
+// travelling" concept (there are several - this burst is reused for the KO
+// spike-landing thud, the juggle-burst escape, projectile impacts, etc, not
+// every one of which has a clean single attacker) can still call this
+// exactly as before. Mirrors the same ctx.scale(-1,1)-around-the-draw-point
+// pattern drawSurgeBlast already uses for the ranged bolt, so a burst spawned
+// off a leftward-facing hit doesn't render as a mirror-identical blob to one
+// spawned off a rightward one.
+export function drawEnergyBurst(ctx, x, y, frame, facing = 1) {
   if (!ENERGY_BURST_SHEET.complete || ENERGY_BURST_SHEET.naturalWidth === 0) return;
   const f = Math.min(ENERGY_BURST_TOTAL_FRAMES - 1, Math.max(0, frame));
   const size = ENERGY_BURST_FRAME * ENERGY_BURST_DRAW_SCALE;
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   ctx.translate(x, y);
+  if (facing === -1) ctx.scale(-1, 1);
   ctx.drawImage(
     ENERGY_BURST_SHEET,
     f * ENERGY_BURST_FRAME,
@@ -727,13 +759,22 @@ const HIT_SPARK_FRAME = 72;
 export const HIT_SPARK_TOTAL_FRAMES = 2;
 const HIT_SPARK_DRAW_SCALE = 0.75;
 
-export function drawHitSpark(ctx, x, y, frame) {
+// facing/rotationDeg (stage 5, requirement 14) - both optional, default to
+// "no change" (facing 1 = unflipped, rotation 0 = as-authored) so this stays
+// a drop-in call for anywhere that doesn't have a meaningful direction.
+// rotationDeg is how vertical-traveling hits (uppercut launching UP,
+// punchDown/finisher/juggle-spike slamming DOWN) get a genuinely different
+// orientation than a horizontal punch/kick's spark, same idea the swish FX
+// already applies via its own rotation param in game.js.
+export function drawHitSpark(ctx, x, y, frame, facing = 1, rotationDeg = 0) {
   if (!HIT_SPARK_SHEET.complete || HIT_SPARK_SHEET.naturalWidth === 0) return;
   const f = Math.min(HIT_SPARK_TOTAL_FRAMES - 1, Math.max(0, frame));
   const size = HIT_SPARK_FRAME * HIT_SPARK_DRAW_SCALE;
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   ctx.translate(x, y);
+  if (rotationDeg) ctx.rotate((rotationDeg * Math.PI) / 180);
+  if (facing === -1) ctx.scale(-1, 1);
   ctx.drawImage(
     HIT_SPARK_SHEET,
     f * HIT_SPARK_FRAME,
@@ -795,32 +836,50 @@ const COMBO_POW_IMG = loadImg("assets/fx/small_pow.png");
 const COMBO_POW_BIG_IMG = loadImg("assets/fx/red_pop.png");
 export const COMBO_POW_DURATION = 18;
 
-export function drawComboPow(ctx, x, y, t, big, scale = 1) {
+// growth curve trimmed 0.6+progress*0.8 -> 0.5+progress*0.35 (stage 5,
+// requirement 14) - at the old curve this topped out well past the
+// character's own scale on a long combo (comboPowScale in game.js could
+// still push `scale` up to 1.8 on top of this); small_pow now tops out
+// around ~60px instead of ~130px+, reading as limb-scale impact feedback
+// rather than a burst that swallows the fighter. big-mode's own escalation
+// headroom is trimmed separately, in game.js's comboPowScale (1.8 -> 1.0
+// cap) - the KO moment (drawHeadPop below) stays the biggest FX in the game
+// on purpose, so this never grows past it.
+export function drawComboPow(ctx, x, y, t, big, scale = 1, facing = 1) {
   const img = big ? COMBO_POW_BIG_IMG : COMBO_POW_IMG;
   if (!img.complete || img.naturalWidth === 0) return;
   const progress = Math.min(1, t / COMBO_POW_DURATION);
-  const growth = (0.6 + progress * 0.8) * scale;
+  const growth = (0.5 + progress * 0.35) * scale;
   const alpha = 1 - progress;
   const size = img.naturalWidth * growth;
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
+  ctx.translate(x, y);
+  if (facing === -1) ctx.scale(-1, 1);
+  ctx.drawImage(img, -size / 2, -size / 2, size, size);
   ctx.restore();
 }
 
 // Plays once over the KO's head position - scales up and fades out rather
 // than stepping frames, since the source art is one still burst image.
-export function drawHeadPop(ctx, x, y, t) {
+// growth trimmed 0.6+progress*1.4 -> 0.6+progress*0.6 (stage 5, requirement
+// 14) - tops out around ~94px now instead of ~166px+. Still the single
+// biggest FX draw in the game on purpose (the KO moment should read as the
+// biggest beat of any match), just no longer big enough to dwarf the
+// character's own ~109px scale outright.
+export function drawHeadPop(ctx, x, y, t, facing = 1) {
   if (!HEAD_POP_IMG.complete || HEAD_POP_IMG.naturalWidth === 0) return;
   const progress = Math.min(1, t / HEAD_POP_DURATION);
-  const scale = 0.6 + progress * 1.4;
+  const scale = 0.6 + progress * 0.6;
   const alpha = 1 - progress;
   const size = HEAD_POP_IMG.naturalWidth * scale;
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(HEAD_POP_IMG, x - size / 2, y - size / 2, size, size);
+  ctx.translate(x, y);
+  if (facing === -1) ctx.scale(-1, 1);
+  ctx.drawImage(HEAD_POP_IMG, -size / 2, -size / 2, size, size);
   ctx.restore();
 }
 

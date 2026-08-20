@@ -110,10 +110,15 @@ function getComboFxTier(comboCount) {
 }
 // Tier 4/5 are already the big moments on their own - this just nudges a
 // long-running string (6, 7, 8+ hits) a little further past whichever of
-// those it's landed on rather than flatlining at the same size forever,
-// capped so it never runs away.
+// those it's landed on rather than flatlining at the same size forever.
+// Rescaled 1.3-1.8 -> 0.7-1.0 (stage 5, requirement 14) - combined with
+// drawComboPow's own trimmed growth curve in body.js, red_pop's absolute max
+// is now ~86px at the deepest combo tier, still SOME escalation headroom
+// past the base pow (requirement 4 wants FX to visibly grow with combo
+// depth) without dwarfing the ~109px character it's meant to read as a
+// limb-scale accent on.
 function comboPowScale(comboCount) {
-  return Math.min(1.8, 1.3 + Math.max(0, comboCount - 4) * 0.1);
+  return Math.min(1.0, 0.7 + Math.max(0, comboCount - 4) * 0.05);
 }
 const COMBO_SWISH_LIFETIME_FRAMES = 16;
 const COMBO_SWISH_FADE_FRAMES = 6;
@@ -121,6 +126,22 @@ const COMBO_SWISH_FADE_FRAMES = 6;
 // keeps playing after a round ends before actually moving on - long enough
 // for a short spoken victory line to finish, not just an instant flash.
 const RESULT_DISPLAY_FRAMES = 170;
+// Post-fight victory showcase (stage 5, requirement 5) - the winner cycles
+// through a few different poses during the result display instead of
+// locking into one flex for the whole thing. "flex" plays first (unchanged
+// from before this stage - endRound still sets it directly the instant a
+// round ends), then this list is what winnerShowcaseT below cycles through.
+// "boxIdle" only appears here because the optional boxing-idle.png art was
+// actually generated and wired into body.js this stage (SHEETS.boxIdle/
+// ANIMS.boxIdle/HEAD_ANCHORS.boxIdle) - if that art were ever missing this
+// list would just drop back to ["flex", "idle"], per the plan's own
+// "stage 5 works without it" framing.
+const VICTORY_POSES = ["flex", "idle", "boxIdle"];
+// How often (in real frames, only while `ended`) the winner's pose swaps to
+// a different entry in VICTORY_POSES - long enough each pose gets to read
+// clearly, short enough more than one swap can actually happen inside
+// RESULT_DISPLAY_FRAMES' own ~170-frame window.
+const VICTORY_POSE_INTERVAL_FRAMES = 96;
 const SPATTER_TICKS_PER_FRAME = 3;
 const IMPACT_TICKS_PER_FRAME = 3;
 // Only 2 source frames (a sharp flash, not a lingering burst) - held longer
@@ -368,6 +389,13 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   let stopped = false;
   let resultTimer = 0;
   let roundWinner;
+  // Post-fight victory showcase (stage 5, requirement 5) - counts real
+  // frames since the round ended (only while `ended`, mirroring how
+  // resultTimer itself only ticks in that same window), driving the
+  // periodic pose swap in endRound's own showcase branch inside loop()
+  // below. Reset to 0 each time endRound actually fires (a fresh round =
+  // a fresh showcase), not a running total across the whole match.
+  let winnerShowcaseT = 0;
   let shake = 0;
   let flash = 0;
   // Hitstop - counts down in real frames. While > 0, loop() below takes the
@@ -475,12 +503,30 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
                   : GROUND_Y - 50;
     const contactX = defenderCenterX + towardAttacker * (gapX * 0.4);
 
+    // FX orientation (stage 5, requirement 14) - attacker.facing when it's a
+    // real Fighter, falling back to towardAttacker (already the correct
+    // left/right sign for "which way this hit traveled") for the synthetic
+    // {x, state} stand-ins updateProjectiles/applyHomingHit pass in below,
+    // which have no .facing of their own.
+    const hitFacing = attacker.facing !== undefined ? attacker.facing : towardAttacker;
+    // Vertical attacks get a genuinely different FX rotation than a level
+    // punch/kick's horizontal one - an uppercut launches UP, punchDown/the
+    // ground finisher's own two states slam DOWN (same attacker.state reads
+    // the contactHeight branch above already uses, so this stays consistent
+    // with it). 0 (no override) for every ordinary horizontal attack.
+    const attackRotationDeg =
+      attacker.state === "uppercut"
+        ? -90 * hitFacing
+        : attacker.state === "punchDown" || attacker.state === "finisherPunch" || attacker.state === "finisherKick"
+          ? 90 * hitFacing
+          : 0;
+
     // Always-on melee impact flash, independent of the blood setting below -
     // punch/kick/slide/uppercut had NO hit feedback at all with blood off
     // before this (this whole function used to bail out first thing unless
     // blood was unlocked), so a landed hit read as silently absorbed even
     // though damage really did register. See drawHitSpark in body.js.
-    hitSparks.push({ x: contactX, y: contactHeight, t: 0 });
+    hitSparks.push({ x: contactX, y: contactHeight, t: 0, facing: hitFacing, rotationDeg: attackRotationDeg });
 
     // Combo charge-up escalation - always-on like the hit spark above (not
     // gated on the blood setting below), since it's readability/feel for the
@@ -495,16 +541,23 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       // Swish leans the direction the hit actually traveled (toward the
       // defender, away from the attacker) rather than a fixed orientation,
       // with a little jitter so repeated hits in one string don't all look
-      // like the exact same stamp.
-      const swishRotation = (towardAttacker === -1 ? Math.PI : 0) + (Math.random() - 0.5) * 0.4;
+      // like the exact same stamp. A vertical attack (attackRotationDeg !== 0)
+      // overrides that horizontal lean with its own up/down orientation
+      // instead - same "extend the existing rotation plumbing" the hit spark
+      // above just got.
+      const swishRotation = attackRotationDeg
+        ? (attackRotationDeg * Math.PI) / 180 + (Math.random() - 0.5) * 0.4
+        : (towardAttacker === -1 ? Math.PI : 0) + (Math.random() - 0.5) * 0.4;
       // level 0/1/2 - see body.js's SWISH_LEVELS. SWISH_COLORED and POW share
       // level 1 (POW just additionally layers a pow burst on top of it);
-      // BIG_POW steps up to level 2, the biggest swish art.
+      // BIG_POW steps up to level 2, the biggest swish art. BIG_POW's own
+      // scale capped 1.9 -> 1.6 (stage 5, requirement 14) - tier 1's scale is
+      // the new ceiling, one less escalation step past it than before.
       const swishLevel = comboTier === COMBO_FX_TIER.SWISH ? 0 : comboTier === COMBO_FX_TIER.BIG_POW ? 2 : 1;
-      const swishScale = comboTier === COMBO_FX_TIER.SWISH ? 1 : comboTier === COMBO_FX_TIER.BIG_POW ? 1.9 : 1.6;
+      const swishScale = comboTier === COMBO_FX_TIER.SWISH ? 1 : 1.6;
       comboSwishes.push({ x: contactX, y: contactHeight, rotation: swishRotation, scale: swishScale, level: swishLevel, t: 0 });
       if (comboTier === COMBO_FX_TIER.POW || comboTier === COMBO_FX_TIER.BIG_POW) {
-        comboPops.push({ x: contactX, y: contactHeight, scale: comboPowScale(defender.comboCount), big: comboTier === COMBO_FX_TIER.BIG_POW, t: 0 });
+        comboPops.push({ x: contactX, y: contactHeight, scale: comboPowScale(defender.comboCount), big: comboTier === COMBO_FX_TIER.BIG_POW, t: 0, facing: hitFacing });
       }
     }
 
@@ -617,7 +670,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         impacts.splice(i, 1);
         continue;
       }
-      drawEnergyBurst(ctx, im.x, im.y, spriteFrame);
+      drawEnergyBurst(ctx, im.x, im.y, spriteFrame, im.facing);
       if (!paused) im.t++;
     }
     for (let i = hitSparks.length - 1; i >= 0; i--) {
@@ -627,7 +680,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         hitSparks.splice(i, 1);
         continue;
       }
-      drawHitSpark(ctx, hs.x, hs.y, spriteFrame);
+      drawHitSpark(ctx, hs.x, hs.y, spriteFrame, hs.facing, hs.rotationDeg);
       if (!paused) hs.t++;
     }
     // Combo swish/pop - same fade-then-expire pattern as splatExtras/impacts
@@ -655,7 +708,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         comboPops.splice(i, 1);
         continue;
       }
-      drawComboPow(ctx, p.x, p.y, p.t, p.big, p.scale);
+      drawComboPow(ctx, p.x, p.y, p.t, p.big, p.scale, p.facing);
       if (!paused) p.t++;
     }
     for (let i = headPops.length - 1; i >= 0; i--) {
@@ -664,7 +717,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         headPops.splice(i, 1);
         continue;
       }
-      drawHeadPop(ctx, p.x, p.y, p.t);
+      drawHeadPop(ctx, p.x, p.y, p.t, p.facing);
       if (!paused) p.t++;
     }
   }
@@ -843,7 +896,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       // existing energy-burst FX rather than adding new art.
       if (!wasBlocking && attacker.state === "kick3") {
         shake = Math.max(shake, SHAKE_ON_SPECIAL);
-        impacts.push({ x: defender.x + BODY_CENTER_OFFSET, y: GROUND_Y - 20, t: 0 });
+        impacts.push({ x: defender.x + BODY_CENTER_OFFSET, y: GROUND_Y - 20, t: 0, facing: attacker.facing });
       }
     }
   }
@@ -1231,7 +1284,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       // from before this rework.
       target.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, target.x + p.facing * AIR_SPECIAL_KNOCKBACK));
     }
-    impacts.push({ x: p.x, y: p.y, t: 0 });
+    impacts.push({ x: p.x, y: p.y, t: 0, facing: p.owner.facing });
   }
 
   // Runs after both fighters' own update() so a projectile spawned this same
@@ -1375,7 +1428,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
           // exactly where the hit happened - "slide" for the rat rush so the
           // blood lands at ground height instead of the bolt's head height.
           spawnHitEffects(target, { x: p.x - BODY_CENTER_OFFSET, state: isRatRush ? "slide" : "special" });
-          impacts.push({ x: p.x, y: isRatRush ? GROUND_Y - 20 : p.y, t: 0 });
+          impacts.push({ x: p.x, y: isRatRush ? GROUND_Y - 20 : p.y, t: 0, facing: p.facing });
           projectiles.splice(i, 1);
           continue;
         }
@@ -1458,7 +1511,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         break;
       case "ko":
         playSound("ko");
-        headPops.push({ x: fighter.x, y: HEAD_Y, t: 0 });
+        headPops.push({ x: fighter.x, y: HEAD_Y, t: 0, facing: fighter.facing });
         break;
       // The actual ground-impact beat of a spike ender - see fighter.js's
       // applyJuggleSpike/the "juggled" branch's own landing check for how
@@ -1478,7 +1531,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       case "hard-knockdown-land":
         playSound("hit", { rate: 0.6, volume: 0.9 });
         shake = Math.max(shake, SHAKE_ON_HIT);
-        impacts.push({ x: fighter.x + BODY_CENTER_OFFSET, y: GROUND_Y - 10, t: 0 });
+        impacts.push({ x: fighter.x + BODY_CENTER_OFFSET, y: GROUND_Y - 10, t: 0, facing: fighter.facing });
         break;
       // The juggle burst (stage 4, requirement 15) - fires the instant
       // fighter.js's own burst check spends the power and exits the juggle
@@ -1492,7 +1545,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       case "juggle-burst":
         playSound("block", { rate: 1.15 });
         shake = Math.max(shake, SHAKE_ON_HIT);
-        impacts.push({ x: fighter.x + BODY_CENTER_OFFSET, y: HEAD_Y, t: 0 });
+        impacts.push({ x: fighter.x + BODY_CENTER_OFFSET, y: HEAD_Y, t: 0, facing: fighter.facing });
         break;
     }
   }
@@ -1542,8 +1595,14 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     ended = true;
     roundWinner = winner;
     resultTimer = RESULT_DISPLAY_FRAMES;
+    // Fresh showcase clock for this round - see loop()'s own `ended` branch
+    // below for where this actually drives the periodic pose swap.
+    winnerShowcaseT = 0;
     const titleEl = document.getElementById("result-title");
     if (winner) {
+      // First pose is always "flex" (unchanged from before this stage) -
+      // loop()'s showcase branch takes over from here, cycling through
+      // VICTORY_POSES as winnerShowcaseT climbs.
       winner.setState("flex");
       const quote = pickVictoryQuote(winner);
       const label = winner === p1 ? "PLAYER ONE" : "PLAYER TWO";
@@ -1571,6 +1630,25 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     if (stopped) return;
 
     if (ended) {
+      // Post-fight victory showcase (stage 5, requirement 5) - every
+      // VICTORY_POSE_INTERVAL_FRAMES real ticks, re-set the winner into a
+      // DIFFERENT pose from VICTORY_POSES than whatever they're currently
+      // in (never a same-pose no-op re-set). "flex" is loop:false (see
+      // body.js's ANIMS.flex), so re-entering it via setState here plays
+      // the whole crouch-into-flex sequence again from frame 0 - a real
+      // "re-flex" beat, not just holding on the final frame. No combat
+      // branch fights this state change (the round is already `ended`,
+      // update() is never called again on either fighter below), same
+      // reason flex's own single initial setState in endRound already
+      // relied on never being overwritten.
+      if (roundWinner) {
+        winnerShowcaseT++;
+        if (winnerShowcaseT % VICTORY_POSE_INTERVAL_FRAMES === 0) {
+          const otherPoses = VICTORY_POSES.filter((pose) => pose !== roundWinner.state);
+          const nextPose = otherPoses[Math.floor(Math.random() * otherPoses.length)];
+          roundWinner.setState(nextPose);
+        }
+      }
       // Combat logic (input, hits, movement) is done - just keep the last
       // pose animating (winner's flex, loser's own hitstun/KO) and the
       // frame rendering instead of freezing on whatever frame the round
