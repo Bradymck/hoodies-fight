@@ -26,8 +26,10 @@ import {
   MAX_POWER,
   SLIDE,
   UPPERCUT,
-  AIR_ATTACK,
-  AIR_PUNCH_CHAIN,
+  AIR_MEDIUM,
+  AIR_LIGHT,
+  AIR_HEAVY,
+  AIR_FINISHER,
   AIR_SPECIAL,
   AIR_SPECIAL_KNOCKBACK,
   AIR_KICK_POSES,
@@ -49,47 +51,75 @@ import { findGamepad, buildGamepadInput } from "./gamepad.js";
 // discrete keys now instead of one action plus a held-direction read. q/z
 // (p1) and o/p (p2) chosen so each pair sits right next to that player's own
 // existing key cluster.
+//
+// Light/Medium/Heavy (DBFZ-style generic attack ladder) replace the old
+// same-button punch/kick chains - light/medium/heavy directly reuse the
+// freed old punch("f"/"k")/kick("g"/"l") keys plus one new adjacent key each
+// (p1: "h", right next to g; p2: ";", right next to l) rather than scattering
+// them somewhere unrelated, so both hands land on the exact same physical
+// cluster they always did. `block` is GONE entirely - see fighter.js's
+// isHoldingBack/the block/blockLow branch of update() - holding the
+// direction AWAY from the opponent (facing-relative, not a hardcoded key) is
+// the guard trigger now, no dedicated button at all.
+//
+// p1's special moved off its old "r" key onto "y" (formalize-the-finisher
+// pass) - "r" left Heavy("h") and Special two full rows apart on a diagonal
+// stretch (row1 vs row2), a genuinely awkward hold for the new Heavy+Special
+// ground-finisher macro (see JUGGLE_FINISHER in fighter.js). "y" sits
+// immediately diagonal-up from "h" (same stagger every other row1-over-
+// home-row key on this pad already has, e.g. "e" over "d"/"f"), so
+// Heavy+Special is still just two adjacent fingers on one hand, not a
+// stretch across rows - NOT "j" (an earlier pass of this same rework tried
+// that, missing that "j" is p2's own pre-existing special key: with both
+// players sharing one physical keyboard, that silently made "j" fire BOTH
+// fighters' special at once, a real collision, not just an ergonomics
+// nitpick). p2 keeps its own pre-existing "j"/";" special/heavy pair
+// unchanged - already a single-hand home-row span (j-k-l-;, index to pinky)
+// with light/medium riding the two keys in between, no reachability problem
+// to fix there.
 const KEYMAP = {
   p1: {
     left: "a",
     right: "d",
-    block: "c",
     crouch: "s",
     jump: " ",
     uppercut: "w",
     slide: "e",
-    punch: "f",
-    kick: "g",
-    special: "r",
+    light: "f",
+    medium: "g",
+    heavy: "h",
+    special: "y",
     dashForward: "q",
     dashBack: "z",
   },
   p2: {
     left: "arrowleft",
     right: "arrowright",
-    block: "m",
     crouch: "arrowdown",
     jump: "arrowup",
     uppercut: "i",
     slide: "u",
-    punch: "k",
-    kick: "l",
+    light: "k",
+    medium: "l",
+    heavy: ";",
     special: "j",
     dashForward: "o",
     dashBack: "p",
   },
 };
 
-// A blocked punch/kick docks the ATTACKER's power instead of the old model
-// (real cost to even throw the swing, win or lose) - punch/kick/crouchPunch/
-// crouchKick/airPunch all cost 0 up front now (see PUNCH_CHAIN/KICK_CHAIN/
-// CROUCH_PUNCH/CROUCH_KICK/AIR_PUNCH_CHAIN in fighter.js), so a whiffed or
-// landed basic attack is free - only getting read and blocked actually costs
-// you anything. Matches BLOCK_POWER_GAIN's own value (fighter.js) so it reads
-// as a direct transfer: what the defender gains for guessing right, the
-// attacker loses for guessing wrong. punchDown/finisher/uppercut/slide/
-// special keep their own existing cost model unchanged - this only applies
-// to the basic punch/kick family checkHit/checkAirPunchHit gate it to below.
+// A blocked Light/Medium/Heavy docks the ATTACKER's power instead of the old
+// model (real cost to even throw the swing, win or lose) - light/medium/
+// heavy/crouchPunch/crouchPunchHeavy/crouchKick/airPunch all cost 0 up front
+// now (see LIGHT_ATTACK/MEDIUM_ATTACK/HEAVY_ATTACK/CROUCH_LIGHT/
+// CROUCH_MEDIUM/CROUCH_HEAVY/AIR_LIGHT/AIR_HEAVY in fighter.js), so a
+// whiffed or landed basic attack is free
+// - only getting read and blocked actually costs you anything. Matches
+// BLOCK_POWER_GAIN's own value (fighter.js) so it reads as a direct transfer:
+// what the defender gains for guessing right, the attacker loses for
+// guessing wrong. punchDown/finisher/uppercut/slide/special keep their own
+// existing cost model unchanged - this only applies to the basic punch/kick
+// family checkHit/checkAirPunchHit gate it to below.
 const BLOCKED_PUNCH_KICK_POWER_LOSS = 10;
 
 const SHAKE_ON_HIT = 6;
@@ -285,7 +315,12 @@ function applyComboMagnet(attacker, defender) {
 // instead of repeating the same four-state OR chain at every call site
 // below - same reasoning KICK_POSES already collapses several pose variants
 // into one classification for.
-const AIR_PUNCH_STATE_SET = new Set(AIR_PUNCH_CHAIN.map((move) => move.state));
+const AIR_PUNCH_STATE_SET = new Set([AIR_LIGHT.state, AIR_HEAVY.state, AIR_FINISHER.state]);
+// checkAirPunchHit below needs the three move OBJECTS (not just their state
+// names) to look up per-move damage/range/timing - same list, kept separate
+// from the plain state-name Set above since that one only ever needs
+// membership, never the move data itself.
+const AIR_PUNCH_MOVES = [AIR_LIGHT, AIR_HEAVY, AIR_FINISHER];
 
 function isAirborne(fighter) {
   const state = fighter.state;
@@ -355,8 +390,8 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   // ignored entirely when this is on; readInput(KEYMAP.p2) is also skipped
   // since nobody's meant to be on the second keymap for solo practice.
   const emptyP2Input = {
-    left: false, right: false, block: false, crouch: false, jump: false,
-    uppercut: false, slide: false, punch: false, kick: false, special: false,
+    left: false, right: false, crouch: false, jump: false,
+    uppercut: false, slide: false, light: false, medium: false, heavy: false, special: false,
     dashForward: false, dashBack: false,
   };
   const getAIInput = practiceMode ? null : p2AI ? createAIController(p2, p1) : null;
@@ -374,13 +409,13 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     return {
       left: pressed.has(map.left),
       right: pressed.has(map.right),
-      block: pressed.has(map.block),
       crouch: pressed.has(map.crouch),
       jump: pressed.has(map.jump),
       uppercut: pressed.has(map.uppercut),
       slide: pressed.has(map.slide),
-      punch: pressed.has(map.punch),
-      kick: pressed.has(map.kick),
+      light: pressed.has(map.light),
+      medium: pressed.has(map.medium),
+      heavy: pressed.has(map.heavy),
       special: pressed.has(map.special),
       dashForward: pressed.has(map.dashForward),
       dashBack: pressed.has(map.dashBack),
@@ -516,11 +551,11 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
           ? PROJECTILE_Y
           : AIR_KICK_POSES.includes(attacker.state)
             ? GROUND_Y - 110
-            : attacker.state === "punchDown"
+            : attacker.state === AIR_FINISHER.state
               ? GROUND_Y - 70
-              : AIR_PUNCH_CHAIN.some((m) => m.state === attacker.state)
+              : attacker.state === AIR_LIGHT.state || attacker.state === AIR_HEAVY.state
                 ? GROUND_Y - 110
-                : attacker.state === "uppercut" || attacker.state === "finisherPunch" || attacker.state === "finisherKick"
+                : attacker.state === "uppercut" || attacker.state === "finisherPunch"
                   ? GROUND_Y - 90
                   : GROUND_Y - 50;
     const contactX = defenderCenterX + towardAttacker * (gapX * 0.4);
@@ -533,13 +568,13 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     const hitFacing = attacker.facing !== undefined ? attacker.facing : towardAttacker;
     // Vertical attacks get a genuinely different FX rotation than a level
     // punch/kick's horizontal one - an uppercut launches UP, punchDown/the
-    // ground finisher's own two states slam DOWN (same attacker.state reads
+    // ground finisher's own pose slam DOWN (same attacker.state reads
     // the contactHeight branch above already uses, so this stays consistent
     // with it). 0 (no override) for every ordinary horizontal attack.
     const attackRotationDeg =
       attacker.state === "uppercut"
         ? -90 * hitFacing
-        : attacker.state === "punchDown" || attacker.state === "finisherPunch" || attacker.state === "finisherKick"
+        : attacker.state === "punchDown" || attacker.state === "finisherPunch"
           ? 90 * hitFacing
           : 0;
 
@@ -911,24 +946,6 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       flash = Math.max(flash, defender.lastComboEnder ? FLASH_ON_ENDER : FLASH_ON_HIT);
       triggerHitstop(box.damage, defender.lastEvent === "hit-taken" || defender.lastEvent === "ko" ? defender.comboCount : 1);
       if (!wasBlocking) spawnHitEffects(defender, attacker);
-      // kick3 flourish - the ground kick chain's ender (reusing Builder's
-      // old specialHigh sheet, see body.js's ANIMS.kick3) needs to read as a
-      // real payoff hit, not just the third ordinary kick in a row. box.kind
-      // alone can't tell kick3 apart from kick/kick2 (all three report the
-      // same generic "kick", see attackHitbox above), so this checks
-      // attacker.state directly, same pattern the contact-height branch in
-      // spawnHitEffects already uses. "kick" isn't in fighter.js's
-      // ENDER_KINDS, so a pure kick string never earns the bigger
-      // SHAKE_ON_ENDER/energy-burst treatment through the normal combo-ender
-      // path the way punchDown/uppercut/slide/special/finisher do - this
-      // gives kick3 specifically a bit of that same weight inline instead,
-      // the same shake bump and impact burst every archetype's ranged
-      // special already gets (see updateProjectiles below), reusing the
-      // existing energy-burst FX rather than adding new art.
-      if (!wasBlocking && attacker.state === "kick3") {
-        shake = Math.max(shake, SHAKE_ON_SPECIAL);
-        impacts.push({ x: defender.x + BODY_CENTER_OFFSET, y: GROUND_Y - 20, t: 0, facing: attacker.facing });
-      }
     }
   }
 
@@ -1104,11 +1121,11 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   //     from it) is what actually has to react to this.
   function checkAirAttackHit(attacker, defender) {
     if (attacker.state !== "airKick" && attacker.state !== "flyingKick") return;
-    if (attacker.stateT < AIR_ATTACK.activeStart || attacker.stateT > AIR_ATTACK.activeEnd) return;
+    if (attacker.stateT < AIR_MEDIUM.activeStart || attacker.stateT > AIR_MEDIUM.activeEnd) return;
     if (attacker.hasHit) return;
     const attackerCenterX = attacker.x + BODY_CENTER_OFFSET;
     const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
-    if (Math.abs(attackerCenterX - defenderCenterX) >= AIR_ATTACK.range) return;
+    if (Math.abs(attackerCenterX - defenderCenterX) >= AIR_MEDIUM.range) return;
 
     // Same wasBlocking-before-the-call pattern checkHit/updateSlide already
     // use - only a standing guard actually stops this (see the block-gate
@@ -1137,15 +1154,15 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     if (!wasBlocking) spawnHitEffects(defender, attacker);
   }
 
-  // The aerial PUNCH chain (fighter.js's airPunch1/airPunch2/airPunch3/
-  // punchDown states, AIR_PUNCH_CHAIN) - same shape as checkAirAttackHit
+  // The aerial punch-family moves (fighter.js's AIR_LIGHT/AIR_HEAVY/
+  // AIR_FINISHER, AIR_PUNCH_MOVES above) - same shape as checkAirAttackHit
   // just above (no isAirborne/crouch/blockLow whiff exclusions, for the same
   // reasons that function's own comment gives - reaching an airborne
   // "juggled" defender is the point), just reading per-state move data
-  // instead of one shared AIR_ATTACK spec, since each chain hit has its own
-  // real damage/range/timing now.
+  // instead of one shared AIR_MEDIUM spec, since each of the three has its
+  // own real damage/range/timing.
   function checkAirPunchHit(attacker, defender) {
-    const move = AIR_PUNCH_CHAIN.find((m) => m.state === attacker.state);
+    const move = AIR_PUNCH_MOVES.find((m) => m.state === attacker.state);
     if (!move) return;
     if (attacker.stateT < move.activeStart || attacker.stateT > move.activeEnd) return;
     if (attacker.hasHit) return;
@@ -1178,7 +1195,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       // Same free-to-throw/costs-you-if-blocked model checkHit applies to the
       // grounded punch/kick family (see BLOCKED_PUNCH_KICK_POWER_LOSS above) -
       // punchDown (the finisher) is deliberately excluded, same reasoning as
-      // its own cost staying non-zero in AIR_PUNCH_CHAIN.
+      // AIR_FINISHER's own cost staying non-zero in fighter.js.
       attacker.power = Math.max(0, attacker.power - BLOCKED_PUNCH_KICK_POWER_LOSS);
       attacker.lastEvent = "air-punch-hit";
     } else {
@@ -1515,8 +1532,8 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         playSound("kick", { rate: 0.7 });
         break;
       // The lunge/commit beat when a finisher actually fires (see fighter.js's
-      // arm-window branch) - same pitched-up "committing to a big anti-air-
-      // shaped move" cue uppercut-start/air-attack-start below already use.
+      // finisher-macro branch) - same pitched-up "committing to a big anti-
+      // air-shaped move" cue uppercut-start/air-attack-start below already use.
       case "finisher-start":
         playSound("jump", { rate: 0.7 });
         break;

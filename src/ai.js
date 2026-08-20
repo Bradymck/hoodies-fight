@@ -3,7 +3,29 @@
 // game.js can drive an AI fighter through the identical update() path a
 // real player uses instead of needing a special case.
 
-import { SLIDE, UPPERCUT, PUNCH_POSES, KICK_POSES } from "./fighter.js";
+import { SLIDE, UPPERCUT, PUNCH_POSES, KICK_POSES, CROUCH_LIGHT, CROUCH_MEDIUM, CROUCH_HEAVY, AIR_LIGHT, AIR_HEAVY, AIR_KICK_POSES } from "./fighter.js";
+
+// Every non-grounded-kick attack pose the defensive react-check below treats
+// as "hold back" material - standing Light/Heavy (PUNCH_POSES), both
+// crouching punches AND the crouching kick (crouchKick still gets blocked by
+// a standing guard too - see takeDamage's own blockedByStanding, which only
+// ever excludes kind "special"/"slide", nothing crouch-specific), and every
+// airborne melee pose (a jump-in has to be guarded standing, ducking doesn't
+// save you from one - see checkAirAttackHit/checkAirPunchHit in game.js).
+// Real per-state lists (not bare string checks) for the same future-proofing
+// reason fighter.js's own PUNCH_POSES/KICK_POSES stay real exported lists -
+// this whole file goes blind to any of these otherwise the instant a pose
+// gets renamed or a new one gets added, exactly the class of bug this sweep
+// exists to catch.
+const HOLD_BACK_POSES = [
+  ...PUNCH_POSES,
+  CROUCH_LIGHT.state,
+  CROUCH_MEDIUM.state,
+  CROUCH_HEAVY.state,
+  AIR_LIGHT.state,
+  AIR_HEAVY.state,
+  ...AIR_KICK_POSES,
+];
 
 const ENGAGE_RANGE = 95; // close the gap if farther than this
 const ATTACK_RANGE = 82; // attempt an attack once this close
@@ -30,13 +52,13 @@ function emptyInput() {
   return {
     left: false,
     right: false,
-    block: false,
     crouch: false,
     jump: false,
     uppercut: false,
     slide: false,
-    punch: false,
-    kick: false,
+    light: false,
+    medium: false,
+    heavy: false,
     special: false,
     dashForward: false,
     dashBack: false,
@@ -53,6 +75,11 @@ export function createAIController(self, opponent) {
     const dx = opponent.x - self.x;
     const dist = Math.abs(dx);
     const towardOpponent = dx > 0 ? "right" : "left";
+    // Block has no dedicated input anymore (see fighter.js's isHoldingBack) -
+    // holding the physical direction AWAY from the opponent is what guards
+    // now, so everywhere this AI used to just set input.block = true, it now
+    // holds this direction instead.
+    const awayFromOpponent = towardOpponent === "right" ? "left" : "right";
 
     // Jumping a slide is still the clean, zero-damage answer and gets first
     // crack at it - high odds (close to the only sane response), wide
@@ -64,7 +91,7 @@ export function createAIController(self, opponent) {
         input.jump = true;
         return;
       }
-      // Crouch+block (blockLow) is the OTHER thing that actually stops a
+      // Crouch+back (blockLow) is the OTHER thing that actually stops a
       // slide now - the low half of the standing/crouching guard mixup (see
       // fighter.js's takeDamage) - and doesn't need a jump's frame-perfect
       // timing, so a whiffed jump-read still has a real shot at only chip
@@ -74,7 +101,7 @@ export function createAIController(self, opponent) {
       // it, and shouldn't make the slide trivially safe to throw into
       // either.
       if (Math.random() < 0.35 * difficulty) {
-        input.block = true;
+        input[awayFromOpponent] = true;
         input.crouch = true;
         return;
       }
@@ -88,20 +115,23 @@ export function createAIController(self, opponent) {
       return;
     }
 
-    // React to the opponent actively attacking - duck a kick, block a punch,
-    // roughly half the time (scaled by difficulty) so it isn't a perfect
-    // read every single swing. PUNCH_POSES/KICK_POSES (not literal "punch"/
-    // "kick") - future-proofs this against a later art pass reintroducing
-    // combo-string pose variety (see fighter.js's own comment on those
-    // lists) without this silently going blind to anything past the first
-    // hit of a string.
-    const isKickPose = KICK_POSES.includes(opponent.state);
-    const opponentAttacking = (PUNCH_POSES.includes(opponent.state) || isKickPose || opponent.state === "special") && opponent.stateT < 10;
+    // React to the opponent actively attacking - duck a standing Medium
+    // (the one grounded pose a plain crouch dodges clean, see checkHit's own
+    // box.kind==="kick" exclusion in game.js), hold back against everything
+    // else (HOLD_BACK_POSES above - standing Light/Heavy, every crouching
+    // attack, every airborne one), roughly half the time (scaled by
+    // difficulty) so it isn't a perfect read every single swing. KICK_POSES
+    // (not a literal state check) - future-proofs this against a later art
+    // pass reintroducing combo-string pose variety (see fighter.js's own
+    // comment on that list) without this silently going blind to anything
+    // past the first hit of a string.
+    const isGroundKickPose = KICK_POSES.includes(opponent.state);
+    const opponentAttacking = (isGroundKickPose || HOLD_BACK_POSES.includes(opponent.state) || opponent.state === "special") && opponent.stateT < 10;
     if (opponentAttacking && dist < ATTACK_RANGE + 20 && Math.random() < 0.5 * difficulty) {
-      if (isKickPose && Math.random() < 0.6) {
+      if (isGroundKickPose && Math.random() < 0.6) {
         input.crouch = true;
       } else if (opponent.state !== "special") {
-        input.block = true;
+        input[awayFromOpponent] = true;
       }
       return;
     }
@@ -133,22 +163,22 @@ export function createAIController(self, opponent) {
 
     if (dist <= ATTACK_RANGE) {
       const roll = Math.random();
-      // Kick and special both whiff clean over a crouching opponent, guard
+      // Medium and special both whiff clean over a crouching opponent, guard
       // raised or not (see checkHit's crouch/blockLow kick check and
       // updateProjectiles' crouch/blockLow dodge) - throwing them anyway
       // just burns power for nothing. Was the actual mechanism behind "hold
-      // crouch, spam punch, win every time" against the OLD ai.js (kick/
-      // special wasted into a crouching opponent instead of the punch that
+      // crouch, spam Light, win every time" against the OLD ai.js (Medium/
+      // special wasted into a crouching opponent instead of the Light that
       // actually connects) - still true here regardless of which of the two
       // crouching states the opponent is actually in, which is the specific
       // thing to re-verify after adding blockLow: it must never regress back
-      // into wasting power on a kick/special against either one.
+      // into wasting power on a Medium/special against either one.
       if (opponent.state === "crouch" || opponent.state === "blockLow") {
         // blockLow is a genuine guard, not just a duck - it now stops both
-        // slide and punch (chip damage - see the high/low guard mixup in
-        // fighter.js's takeDamage), so neither is the free punish plain
+        // slide and Light/Heavy (chip damage - see the high/low guard mixup
+        // in fighter.js's takeDamage), so neither is the free punish plain
         // crouch still is. Uppercut is the one thing that actually beats it
-        // clean (a crouching hurtbox still ducks kick/special regardless,
+        // clean (a crouching hurtbox still ducks Medium/special regardless,
         // but doesn't stop an anti-air) - lean on that instead specifically
         // when a guard is actually up. Against plain crouch (no guard
         // raised), slide stays the real free punish, same as before this
@@ -158,24 +188,30 @@ export function createAIController(self, opponent) {
         } else if (opponent.state === "crouch" && self.power >= SLIDE.cost && roll < 0.35) {
           input.slide = true;
         } else if (roll < 0.9) {
-          input.punch = true;
+          input.light = true;
         } else {
-          input.block = true;
+          input[awayFromOpponent] = true;
         }
         return;
       }
       if (self.power >= 50 && roll < 0.2) {
         input.special = true;
-      } else if (self.power >= 20 && roll < 0.45) {
-        input.kick = true;
-      } else if (self.power >= SLIDE.cost && roll < 0.6) {
+      } else if (self.power >= 20 && roll < 0.4) {
+        input.medium = true;
+      } else if (roll < 0.55) {
+        // Heavy - free, same as Light, no power gate needed. Was entirely
+        // missing from this ladder (the AI would defend against a Heavy but
+        // never actually throw one itself) - real offense needs all three
+        // rungs of the ladder represented, not just Light/Medium.
+        input.heavy = true;
+      } else if (self.power >= SLIDE.cost && roll < 0.65) {
         input.slide = true;
       } else if (roll < 0.9) {
-        input.punch = true;
+        input.light = true;
       } else {
-        // Hold ground and block rather than always swinging - keeps it from
-        // reading as a button-mashing bot.
-        input.block = true;
+        // Hold ground and guard (hold back) rather than always swinging -
+        // keeps it from reading as a button-mashing bot.
+        input[awayFromOpponent] = true;
       }
       return;
     }

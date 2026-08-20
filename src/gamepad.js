@@ -32,7 +32,13 @@ const TRIGGER_THRESHOLD = 0.5;
 // same as every other action.
 // dash split into dashForward/dashBack (stage 4, requirement 11) - two
 // discrete buttons now instead of one action plus a held-direction read.
-export const REMAPPABLE_ACTIONS = ["jump", "uppercut", "block", "punch", "kick", "slide", "special", "dashForward", "dashBack"];
+// "block" is GONE (no dedicated button anymore - see fighter.js's
+// isHoldingBack/the block/blockLow branch of update(): holding the direction
+// AWAY from the opponent, read off the existing left/right stick+D-pad axes
+// already wired up below, is the guard trigger now). light/medium/heavy
+// (the generic Light/Medium/Heavy attack ladder replacing the old punch/kick
+// chains) take its place in this list instead.
+export const REMAPPABLE_ACTIONS = ["jump", "uppercut", "light", "medium", "heavy", "slide", "special", "dashForward", "dashBack"];
 
 // Bumpers relocated to make room for the two dash buttons (stage 4): the
 // only genuinely free index left on a standard pad is 11 (R Stick Click - 16
@@ -44,19 +50,25 @@ export const REMAPPABLE_ACTIONS = ["jump", "uppercut", "block", "punch", "kick",
 // second special trigger regardless, and is now the more ergonomic one to
 // actually hold for the ground finisher's arm-window chord (see JUGGLE_
 // FINISHER in fighter.js) - a stick click is awkward to hold through a
-// follow-up punch/kick press, a trigger isn't.
+// follow-up Light/Medium press, a trigger isn't.
 // jump/uppercut swapped from the previous A=uppercut/LT=jump layout - a
 // fighting-game player's own instinct is A=jump (matches nearly every other
 // genre too), and LT is an awkward, easy-to-miss reach for something thrown
 // as often as jump is. Uppercut moves to LT instead - it's a deliberate,
 // occasional input (the launcher), not a rapid-fire one, so a trigger reach
-// fits it better than it ever fit jump.
+// fits it better than it ever fit jump. A(jump) deliberately untouched by
+// this rework, per direct instruction.
+// heavy takes over B/Circle (button 1), freed now that block no longer binds
+// to a button at all - X/Y/B (light/medium/heavy) reads as a natural face-
+// button trio for the three generic attacks, the same physical cluster
+// punch/kick already lived on (X/Y), with heavy landing right next to them
+// instead of on some unrelated, harder-to-reach index.
 const DEFAULT_GAMEPAD_MAP = {
   jump: 0, // A / Cross
   uppercut: 6, // LT
-  block: 1, // B / Circle
-  punch: 2, // X / Square
-  kick: 3, // Y / Triangle
+  heavy: 1, // B / Circle (freed from block)
+  light: 2, // X / Square
+  medium: 3, // Y / Triangle
   slide: 11, // R Stick Click
   special: 10, // L Stick Click
   dashBack: 4, // LB / L1
@@ -99,6 +111,23 @@ function loadGamepadMap() {
       saved.dashForward = saved.dash;
     }
     delete saved.dash;
+    // Same idea, for the Light/Medium/Heavy rework - a saved punch/kick
+    // rebind from before this rework predates light/medium entirely; carry
+    // it over onto light/medium (their direct 1:1 replacements) rather than
+    // silently dropping a player's own prior rebind. block has no
+    // replacement to carry forward to at all (see REMAPPABLE_ACTIONS above -
+    // block isn't a button anymore), so it's just dropped. A no-op for
+    // anyone who never touched punch/kick/block's own bindings, since
+    // DEFAULT_GAMEPAD_MAP's own light/medium/heavy already cover them.
+    if (saved.punch !== undefined && saved.light === undefined) {
+      saved.light = saved.punch;
+    }
+    if (saved.kick !== undefined && saved.medium === undefined) {
+      saved.medium = saved.kick;
+    }
+    delete saved.punch;
+    delete saved.kick;
+    delete saved.block;
     return { ...DEFAULT_GAMEPAD_MAP, ...saved };
   } catch {
     return { ...DEFAULT_GAMEPAD_MAP };
@@ -132,8 +161,8 @@ export function isPressed(gp, index) {
 
 function emptyInput() {
   return {
-    left: false, right: false, block: false, crouch: false, jump: false,
-    uppercut: false, slide: false, punch: false, kick: false, special: false,
+    left: false, right: false, crouch: false, jump: false,
+    uppercut: false, slide: false, light: false, medium: false, heavy: false, special: false,
     dashForward: false, dashBack: false,
   };
 }
@@ -195,9 +224,9 @@ export function buildGamepadInput(gp) {
   input.crouch = stickY > STICK_DEADZONE || isPressed(gp, 13);
   input.jump = isPressed(gp, map.jump);
   input.uppercut = isPressed(gp, map.uppercut);
-  input.block = isPressed(gp, map.block);
-  input.punch = isPressed(gp, map.punch);
-  input.kick = isPressed(gp, map.kick);
+  input.light = isPressed(gp, map.light);
+  input.medium = isPressed(gp, map.medium);
+  input.heavy = isPressed(gp, map.heavy);
   input.slide = isPressed(gp, map.slide);
   input.special = isPressed(gp, map.special) || isPressed(gp, SPECIAL_ALT_BUTTON);
   input.dashForward = isPressed(gp, map.dashForward);

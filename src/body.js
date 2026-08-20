@@ -202,12 +202,15 @@ const HEAD_ANCHORS = {
 HEAD_ANCHORS.kick3 = HEAD_ANCHORS.specialHigh;
 // crouchKick reuses specialLow's own sheet the same way.
 HEAD_ANCHORS.crouchKick = HEAD_ANCHORS.specialLow;
-// Ground finisher (requirement 9) - finisherPunch reuses punchDown's own
-// sheet wholesale, finisherKick reuses kick2's own highKick sheet wholesale
-// (see ANIMS.finisherPunch/ANIMS.finisherKick above) - same live-reference
-// copy pattern as kick3/crouchKick just above, not a re-sample.
+// Ground finisher (requirement 9) - reached via the Heavy+Special hold
+// macro, always finisherPunch now (see fighter.js's finisher-macro branch of
+// update()), which reuses punchDown's own sheet wholesale (see
+// ANIMS.finisherPunch above) - same live-reference copy pattern as kick3/
+// crouchKick just above, not a re-sample. finisherKick (the old alternate
+// pose, reachable back when the arm-window let Light vs Medium pick between
+// two cosmetic finisher poses) is gone along with that chord - single
+// deterministic macro, single pose.
 HEAD_ANCHORS.finisherPunch = HEAD_ANCHORS.punchDown;
-HEAD_ANCHORS.finisherKick = HEAD_ANCHORS.kick2;
 
 // Head art is always drawn upright by default (fine for every standing/
 // crouching pose) - but the death collapse actually tips the body over from
@@ -247,11 +250,11 @@ const ANIMS = {
   // durationFrames match each KICK_CHAIN entry's own `duration`.
   kick2: { sheet: "highKick", frames: 8, durationFrames: 26, loop: false },
   kick3: { sheet: "specialHigh", frames: 15, durationFrames: 34, loop: false },
-  // Free, always-available crouch kick (fighter.js's CROUCH_KICK) - reuses
+  // Free, always-available crouch kick (fighter.js's CROUCH_MEDIUM) - reuses
   // Hodler's old specialLow sheet wholesale, same "borrow an existing sheet
   // for a new state" move kick3 above makes. durationFrames matches
-  // CROUCH_KICK.duration, not the old HODLER_SPECIAL.duration it happens to
-  // share a value with today - see CROUCH_KICK's own comment in fighter.js
+  // CROUCH_MEDIUM.duration, not the old HODLER_SPECIAL.duration it happens to
+  // share a value with today - see CROUCH_MEDIUM's own comment in fighter.js
   // for why these are deliberately separate numbers, not a shared reference.
   crouchKick: { sheet: "specialLow", frames: 7, durationFrames: 28, loop: false },
   // durationFrames (30) matches SPECIAL.release in fighter.js exactly, so
@@ -296,14 +299,16 @@ const ANIMS = {
   // ANIMS entry of their own left pointing a STATE at them anymore.
   //
   // Ground finisher (requirement 9) - a "get over here" gap-close + slam
-  // move, only reachable while an opponent is mid-juggle (see JUGGLE_FINISHER
-  // and the arm-window entry in fighter.js's update()). No new art needed:
-  // finisherPunch reuses the same punchDown sheet the aerial chain's own
-  // finisher/free crouch punch already share (a two-handed downward slam
-  // reads fine as this move's payoff too), finisherKick reuses kick2's
-  // highKick sheet. durationFrames match JUGGLE_FINISHER.duration exactly.
+  // move, only reachable via the Heavy+Special hold macro while an opponent
+  // is mid-juggle (see JUGGLE_FINISHER and the finisher-macro branch in
+  // fighter.js's update()). No new art needed: finisherPunch reuses the same
+  // punchDown sheet the aerial chain's own finisher/free crouch punch already
+  // share (a two-handed downward slam reads fine as this move's payoff too).
+  // durationFrames matches JUGGLE_FINISHER.duration exactly. finisherKick
+  // (a second cosmetic pose, back when Light vs Medium picked between two
+  // finisher poses during the old arm-window chord) is gone along with that
+  // chord - the macro is a single deterministic move now.
   finisherPunch: { sheet: "punchDown", frames: 8, durationFrames: 34, loop: false },
-  finisherKick: { sheet: "highKick", frames: 8, durationFrames: 34, loop: false },
   // Crouching guard (fighter.js's "blockLow" state, entered by holding
   // block+crouch together - see the high/low guard mixup in its takeDamage).
   // The engine this was ported from wires this into a dedicated art still;
@@ -314,33 +319,48 @@ const ANIMS = {
   // CROUCH_EXTRA_SCALE correction (see that constant's comment up top).
   blockLow: { sheet: "crouch", frames: 1, cyclesPerSec: 0, loop: true },
   // Aerial attack (fighter.js's "airKick"/"flyingKick" states - a real jump-
-  // in / juggle-extending air normal, see AIR_ATTACK there). No dedicated
-  // air-strike art exists here either, so both reuse the existing "kick"
-  // sheet, held on its first frame for the move's own AIR_ATTACK.duration
-  // (16) rather than cycling - reads as a kick pose snapped mid-air, same
-  // "reuse what already exists" approach blockLow above takes. Two separate
+  // in / juggle-extending air normal, bound to Medium, see AIR_MEDIUM
+  // there). No dedicated air-strike art exists here either, so both reuse
+  // the existing "kick" sheet, held on its first frame for the move's own
+  // AIR_MEDIUM.duration (16) rather than cycling - reads as a kick pose
+  // snapped mid-air, same "reuse what already exists" approach blockLow
+  // above takes. Two separate
   // ANIMS entries (not one shared state) purely so a later art pass can drop
   // real airKick/flyingKick stills in here without touching fighter.js at
   // all - see pickAirAttackState there for why the engine picks between the
   // two names even though they render identically today.
   airKick: { sheet: "kick", frames: 1, durationFrames: 16, loop: false },
   flyingKick: { sheet: "kick", frames: 1, durationFrames: 16, loop: false },
-  // Aerial punch chain (fighter.js's AIR_PUNCH_CHAIN) - airPunch1 opens on
-  // the same elbow sheet punch3 (the grounded chain's own ender) uses,
-  // airPunch2/3 cycle back through the jab/cross sheets, and punchDown (the
-  // chain's finisher, both here and reused below for the free crouch punch)
-  // is the one genuinely new full-cycle pose - a real overhead slam, not a
-  // held single frame the way airKick/flyingKick above still are.
-  // durationFrames match each AIR_PUNCH_CHAIN entry's own `duration`.
+  // Aerial punch-family poses (fighter.js's AIR_LIGHT/AIR_HEAVY/
+  // AIR_FINISHER) - airPunch1 (AIR_LIGHT) opens on the same elbow sheet
+  // punch3/HEAVY_ATTACK uses standing, airPunch3 (AIR_HEAVY) reuses the
+  // cross sheet, and punchDown (AIR_FINISHER, reused below for the free
+  // crouch punch too) is the one genuinely full-cycle overhead-slam pose,
+  // not a held single frame the way airKick/flyingKick above still are.
+  // airPunch2's own sheet (punchJab) is now orphaned as an AERIAL pose - it
+  // was only ever the old airPunch1->2->3 chain's middle hit, and nothing
+  // enters "airPunch2" anymore now that AIR_LIGHT/AIR_HEAVY are direct-entry
+  // moves, not a chain (same "an old chain-middle-hit's sheet sits unused
+  // once nothing throws it" situation grounded punch2 is already in - see
+  // that ANIMS entry's own comment above). durationFrames match each of
+  // AIR_LIGHT/AIR_HEAVY/AIR_FINISHER's own `duration`.
   airPunch1: { sheet: "elbow", frames: 8, durationFrames: 16, loop: false },
   airPunch2: { sheet: "punchJab", frames: 8, durationFrames: 16, loop: false },
   airPunch3: { sheet: "punchCross", frames: 8, durationFrames: 16, loop: false },
   punchDown: { sheet: "punchDown", frames: 8, durationFrames: 20, loop: false },
-  // Free crouching punch (fighter.js's CROUCH_PUNCH) - dual-uses the exact
+  // Free crouching punch (fighter.js's CROUCH_LIGHT) - dual-uses the exact
   // same punchDown sheet/frame count as the air finisher above (a two-handed
   // overhead slam reads fine held low too), just its own durationFrames
-  // matching CROUCH_PUNCH.duration.
+  // matching CROUCH_LIGHT.duration.
   crouchPunch: { sheet: "punchDown", frames: 8, durationFrames: 20, loop: false },
+  // Free crouching Heavy (fighter.js's CROUCH_HEAVY, genuinely new this
+  // phase - the old crouch system only ever had two moves, never a Heavy of
+  // its own). Reuses the punchCross sheet (airPunch3/the old grounded
+  // punch2's own sheet) rather than punchDown a second time - two
+  // differently-weighted crouching punches sharing CROUCH_LIGHT's own pose
+  // would read as the same move twice. durationFrames matches
+  // CROUCH_HEAVY.duration.
+  crouchPunchHeavy: { sheet: "punchCross", frames: 8, durationFrames: 24, loop: false },
   // Bonus fix, zero new art: juggled fighters (fighter.js's "juggled" state -
   // a real airborne physics state, see its own big comment block there) had
   // NO entry here at all, so drawFighter's own `ANIMS[state] || ANIMS.idle`
