@@ -475,6 +475,46 @@ const JUGGLE_SPIKE_VELOCITY = 24;
 // hardcoded state entry.
 const HARD_KNOCKDOWN_DURATION = 65;
 
+// --- Ender push-out (stage 4, requirement 10) -------------------------------
+// Every "ender"-class hit (isComboEnder above - uppercut/slide/special/
+// punchDown/finisher at real depth, or any killing blow) should leave a real
+// gap the attacker has to walk/dash back across to keep pressuring, not just
+// chip damage in place. Bigger than SLIDE's own baseline knockback (90) on
+// purpose - an ender is supposed to read as a bigger, more decisive shove
+// than an ordinary connecting slide. Exported (unlike most bare move
+// constants in this file) because BOTH this file and game.js need the exact
+// same number: this file applies it directly at the moment a SPIKED juggle
+// (punchDown/finisher) lands (see the "juggled" branch's own landing check
+// above) - the only place with both "was this hit's own ender-class slam"
+// knowledge AND the opponent reference needed to compute which way to push -
+// while game.js applies it at its own two ender-class call sites (a
+// real-depth slide hit, and the grounded special's own unblocked-hit
+// knockback, stage 3B) that don't touch this file's state machine directly.
+export const ENDER_PUSHOUT = 160;
+
+// --- Juggle burst (stage 4, requirement 15) ---------------------------------
+// The one, single escape mechanism out of a juggle sequence - reusing the
+// EXISTING block input/power resource rather than adding a new binding (see
+// the burst check at the top of the "juggled" branch above/below). Reactive-
+// only (can only ever fire while genuinely "juggled" - it structurally can't
+// be thrown out proactively/whiffed the way a real move could), so the only
+// real lever a player has to make it more available is playing defense
+// EARLIER in the exchange (blocking/parrying banks real power - see
+// BLOCK_POWER_GAIN/PARRY_POWER_GAIN below - passive regen alone, 0.03/frame,
+// can't refill 40 power mid-combo).
+const BURST_COST = 40;
+// Full damage immunity for this many real ticks after a successful burst -
+// covers the entire KNOCKBACK_DURATION (28) flight this same burst puts the
+// fighter into, plus a couple frames of margin, so landing back in
+// "knockback" can't immediately eat a follow-up hit (or get re-launched)
+// before they've even finished flying out of the juggle they just escaped.
+const BURST_IMMUNITY_FRAMES = 30;
+// Real distance, not a token nudge - meaningfully more than an ordinary
+// slide's own knockback (90), on the same order as ENDER_PUSHOUT above,
+// since escaping a juggle for a real 40-power cost needs to buy a real gap,
+// not just a half-second of invincibility standing in place.
+const BURST_PUSHOUT = 140;
+
 // --- Aerial attacks (airKick/flyingKick) ------------------------------------
 // The move that actually USES the launcher/juggle system above - and, on its
 // own, the classic fighting-game "jump-in". Upstream wires this into two
@@ -837,10 +877,15 @@ const INPUT_BUFFER_FRAMES = 5;
 // Priority order when two actions are pressed the same tick - most
 // committal move wins and gets buffered (arbitrary but consistent; a real
 // simultaneous double-press is rare and this just needs to be deterministic).
-// dash sits right after jump - both are non-damaging repositioning tools,
-// ahead of the attacks that actually matter to prioritize if two buttons
-// land the same frame.
-const BUFFERABLE_ACTIONS = ["special", "jump", "dash", "slide", "kick", "punch"];
+// dashForward/dashBack sit right after jump - both are non-damaging
+// repositioning tools, ahead of the attacks that actually matter to
+// prioritize if two buttons land the same frame. Split from the old single
+// "dash" action (stage 4, requirement 11) - two discrete buttons now, not
+// one action plus a held-direction read. "block" is deliberately NOT in this
+// list - the juggle burst it drives (see BURST_COST above) is reactive-only,
+// checked directly off justPressed.block at the top of the "juggled" branch,
+// never queued/buffered the way a grounded attack's early press is.
+const BUFFERABLE_ACTIONS = ["special", "jump", "dashForward", "dashBack", "slide", "kick", "punch"];
 
 // One mechanical trait per Hood archetype - matches their own "Builders,
 // Collectors, Flippers and HODLers" framing directly rather than inventing
@@ -887,7 +932,7 @@ export class Fighter {
     // justPressed block. Holding a button down must not auto-repeat it the
     // instant the previous one ends; each activation needs its own fresh
     // press, same as a real arcade cabinet.
-    this.prevInput = { punch: false, kick: false, slide: false, special: false, jump: false, dash: false };
+    this.prevInput = { punch: false, kick: false, slide: false, special: false, jump: false, dashForward: false, dashBack: false, block: false };
     // See the combo-scaling block above - how many hits in a row have
     // landed on THIS fighter with no gap (still locked in hitstun/knockback
     // each time the next one connected). Reset to 1 the moment a hit lands
@@ -985,11 +1030,33 @@ export class Fighter {
     // sequence, not just one sub-state" shape juggleAirborneFrames above
     // already uses for the same reason.
     this.airborneT = 0;
+    // Requirement 11's backward jump - set once, at jump-entry, from whatever
+    // direction was held at the moment of the press (see the jump-start
+    // branch below): true only when that held direction is genuinely AWAY
+    // from the opponent, false for a neutral or toward-opponent jump (a
+    // plain forward/vertical jump is byte-identical to before this field
+    // existed - see jumpOffset/applyMove's own reads of it). A real boolean
+    // rather than a second jump state string - every existing
+    // `state === "jump"` check (isAirborne in game.js, jumpOffset here, the
+    // combined jump/air-attack branch below) stays valid unchanged.
+    this.jumpBack = false;
+    // Requirement 11's air dash - true only while state is "dash" AND that
+    // dash was thrown mid-air (see the airborne branch below vs the plain
+    // grounded dash entry point, which never sets this true). Distinguishes
+    // the two so an air dash can keep draining airborneT and hand control
+    // back to "jump" on exit, while a grounded dash still returns straight
+    // to "idle" through the ordinary shared duration-map branch, unchanged.
+    this.dashWasAirborne = false;
     // Input buffer state - see INPUT_BUFFER_FRAMES above. At most one
     // pending action at a time (the latest press wins); consumeBuffered()
     // clears it the moment it actually fires.
     this.bufferedAction = null;
     this.bufferTtl = 0;
+    // Requirement 15's juggle burst - see BURST_IMMUNITY_FRAMES above. Real
+    // per-fighter countdown (this engine has no global frame counter),
+    // decremented once per real update() tick, checked first thing in
+    // takeDamage below (a full ignore, not a discount, while > 0).
+    this.burstImmunityT = 0;
     // Single-frame-lived flags, same lifecycle as lastEvent (reset to a
     // neutral value at the top of every update(), only ever set true inside
     // takeDamage for the exact frame a real hit lands on this fighter) - see
@@ -1046,7 +1113,19 @@ export class Fighter {
       slide: input.slide && !this.prevInput.slide,
       special: input.special && !this.prevInput.special,
       jump: input.jump && !this.prevInput.jump,
-      dash: input.dash && !this.prevInput.dash,
+      // Split from the old single "dash" (stage 4, requirement 11) - two
+      // discrete edge-triggered buttons now instead of one action plus a
+      // held-direction read at activation time.
+      dashForward: input.dashForward && !this.prevInput.dashForward,
+      dashBack: input.dashBack && !this.prevInput.dashBack,
+      // Requirement 15's juggle burst - block is still LEVEL-read everywhere
+      // else in this file (the ordinary block/blockLow stance below never
+      // switches to edge-triggering), this is purely an ADDITIONAL edge
+      // reading of the exact same input.block, used only by the burst check
+      // at the top of the "juggled" branch - a player has to actually tap
+      // block fresh while airborne, not just already be holding it down for
+      // an unrelated reason from before the launch connected.
+      block: input.block && !this.prevInput.block,
     };
     this.prevInput = {
       punch: input.punch,
@@ -1054,7 +1133,9 @@ export class Fighter {
       slide: input.slide,
       special: input.special,
       jump: input.jump,
-      dash: input.dash,
+      dashForward: input.dashForward,
+      dashBack: input.dashBack,
+      block: input.block,
     };
 
     // Ages the buffer down every real tick this runs on - including
@@ -1150,6 +1231,9 @@ export class Fighter {
     // Same countdown, same reasoning, for the kick chain (see KICK_CHAIN/
     // enterKickChain).
     if (this.kickChainResetT > 0) this.kickChainResetT--;
+    // Same countdown, same reasoning, for the juggle burst's own damage
+    // immunity window (see BURST_IMMUNITY_FRAMES above).
+    if (this.burstImmunityT > 0) this.burstImmunityT--;
 
     // Power slowly refills on its own except while kicking - jump is free
     // (it's the dodge tool, including for the ranged special, so it can't be
@@ -1175,6 +1259,44 @@ export class Fighter {
     // able to act again once they land (see the "knockback" landing-
     // recovery transition below).
     if (this.state === "juggled") {
+      // Juggle burst (stage 4, requirement 15) - checked FIRST, ahead of the
+      // ordinary gravity integration just below, so a successful burst this
+      // tick fully replaces that tick's own physics rather than running both
+      // (a burst that also fell a frame first would read as a stutter).
+      // Reactive-only - this whole branch is only ever reachable while
+      // genuinely "juggled" in the first place, so there's no way to throw
+      // it out early/whiff it the way a real move could be. opponent (this
+      // fighter's actual attacker in this exact matchup) is what
+      // BURST_PUSHOUT's own direction is computed away from.
+      if (justPressed.block && this.power >= BURST_COST) {
+        this.spendPower(BURST_COST);
+        this.juggleY = 0;
+        this.juggleVY = 0;
+        // A burst is never a spike, regardless of whether one was already
+        // banked from an earlier hit this same sequence (see applyJuggleSpike
+        // above) - escaping is a deliberate escape, not a slam, so it must
+        // never inherit HARD_KNOCKDOWN_DURATION's much longer hold. This is
+        // the one other explicit clear of both fields besides the ordinary
+        // landing check right below and takeDamage's own slide/special
+        // staleness guard.
+        this.spiked = false;
+        this.hardKnockdownFrames = null;
+        // A clean escape, not a punish landed ON this fighter - the very
+        // next hit that connects (on either side) should read as a fresh
+        // count, not inherit whatever depth this juggle sequence had already
+        // reached.
+        this.comboCount = 0;
+        // AWAY from the attacker, not toward - `|| -this.facing` only ever
+        // matters in the (practically unreachable, since a juggle requires a
+        // real launch that already moved this fighter off the opponent's own
+        // x) degenerate case the two share an exact x.
+        const pushDir = opponent ? Math.sign(this.x - opponent.x) || -this.facing : -this.facing;
+        this.setState("knockback");
+        this.setKnockbackMotion(pushDir, BURST_PUSHOUT);
+        this.burstImmunityT = BURST_IMMUNITY_FRAMES;
+        this.lastEvent = "juggle-burst";
+        return;
+      }
       // Counts every real tick of this entire juggle SEQUENCE, straight
       // through relaunches - unlike this.stateT (zeroed by every setState,
       // including the one applyJuggleLaunch itself calls on a relaunch),
@@ -1204,11 +1326,67 @@ export class Fighter {
         // game.js, which reacts to it with the real ground-impact shake/
         // thud/FX a slam this hard deserves, distinct from (and a beat
         // after) whatever hit did the spiking itself up in the air.
-        this.hardKnockdownFrames = this.spiked ? HARD_KNOCKDOWN_DURATION : null;
+        const wasSpiked = this.spiked;
+        this.hardKnockdownFrames = wasSpiked ? HARD_KNOCKDOWN_DURATION : null;
         this.spiked = false;
-        if (this.hardKnockdownFrames) this.lastEvent = "hard-knockdown-land";
+        if (this.hardKnockdownFrames) {
+          this.lastEvent = "hard-knockdown-land";
+          // Ender push-out (stage 4, requirement 10) - a spiked landing
+          // (punchDown/finisher's own closer) composes the SAME real
+          // horizontal shove every other ender-class hit gets (see
+          // ENDER_PUSHOUT's own comment above) with this hold, instead of
+          // just sitting still through the whole hard-knockdown recovery -
+          // the attacker still has to walk/dash back across real ground to
+          // keep pressuring after landing the slam that put them here. Away
+          // from wherever the opponent actually is right now, same
+          // reasoning the burst's own pushDir above uses.
+          if (opponent) {
+            const pushDir = Math.sign(this.x - opponent.x) || -this.facing;
+            this.setKnockbackMotion(pushDir, ENDER_PUSHOUT);
+          }
+        }
         this.setState("knockback");
         return;
+      }
+      return;
+    }
+
+    // Air dash (stage 4, requirement 11) - forward chases a juggle, back
+    // bails out. Deliberately its own early-return branch, same pattern as
+    // "juggled" above/"uppercut-charge" below, rather than folded into the
+    // grounded dash's own shared duration-map branch further down:
+    // dashWasAirborne is what tells the two apart (only ever set true by the
+    // air-dash entry points in the combined jump/air-attack branch below,
+    // always false for a grounded dash) and a grounded dash always returns
+    // straight to "idle", while this one has to keep draining the SAME
+    // airborneT flight budget the surrounding jump was already using (see
+    // that field's own constructor comment) and hand control back to "jump"
+    // if there's still airtime left when the burst ends - exactly the same
+    // "still airborne? return to jump, not idle" rule airKick/flyingKick's
+    // own exit already follows - never landing early just because this
+    // particular pose's own short timer ran out.
+    if (this.state === "dash" && this.dashWasAirborne) {
+      this.airborneT++;
+      // Same eased-burst motion the grounded dash branch below uses -
+      // duplicated here (not shared via a helper) since this branch's own
+      // exit condition/return-to-jump logic is otherwise entirely different
+      // from that branch's plain "hit duration, go to idle" shape.
+      if (this.dashDir) {
+        const t = Math.min(1, this.stateT / DASH_DURATION);
+        const eased = 1 - (1 - t) * (1 - t);
+        this.x = Math.max(
+          ARENA_MIN_X,
+          Math.min(ARENA_MAX_X, this.dashStartX + this.dashDir * DASH_DISTANCE * eased),
+        );
+      }
+      if (this.stateT >= DASH_DURATION) {
+        const stillAirborne = this.airborneT < JUMP_DURATION;
+        this.dashWasAirborne = false;
+        this.setState(stillAirborne ? "jump" : "idle");
+        if (!stillAirborne) {
+          this.airPunchChainIndex = 0;
+          this.airKickChainIndex = 0;
+        }
       }
       return;
     }
@@ -1413,11 +1591,52 @@ export class Fighter {
       // One tick of real airtime, regardless of which of these states this
       // is - a fighter thrusting into an air attack mid-jump hasn't touched
       // the ground, so their total flight budget (JUMP_DURATION) keeps
-      // draining exactly like it would if they'd just kept falling.
-      this.airborneT++;
+      // draining exactly like it would if they'd just kept falling. Backward
+      // jump (requirement 11, this.jumpBack - see the jump-entry point below
+      // for how it's decided) drains it a little FASTER (1.25x) - the whole
+      // point of a back-jump is a quicker, shorter escape hop, not the same
+      // full hang time a forward/neutral jump gets.
+      this.airborneT += this.jumpBack ? 1.25 : 1;
 
       if (this.state === "jump") {
         this.applyMove(input);
+        // Backward jump's own locked baseline drift (requirement 11) - a
+        // small constant push AWAY from the facing direction every tick,
+        // layered on top of whatever applyMove's own left/right input already
+        // did, so even a neutral (no held direction) back-jump still visibly
+        // carries the fighter backward through the air, not just up and
+        // straight back down in place.
+        if (this.jumpBack) {
+          this.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, this.x - this.facing * 2));
+        }
+        // Air dash (requirement 11) - same two edge-triggered checks the
+        // grounded neutral branch below uses, gated the same
+        // justPressed-or-buffered-and-affordable way every other power-gated
+        // aerial action in this same "jump" sub-block already is (see the
+        // air-kick check just below). dashWasAirborne is what the dedicated
+        // early-return branch above reads to keep draining airborneT and
+        // hand control back to "jump" instead of returning straight to
+        // "idle" the way a grounded dash does.
+        if ((justPressed.dashForward || this.hasBuffered("dashForward")) && this.power >= DASH_COST) {
+          this.consumeBuffered("dashForward");
+          this.spendPower(DASH_COST);
+          this.dashDir = this.facing;
+          this.dashStartX = this.x;
+          this.dashWasAirborne = true;
+          this.setState("dash");
+          this.lastEvent = "dash-start";
+          return;
+        }
+        if ((justPressed.dashBack || this.hasBuffered("dashBack")) && this.power >= DASH_COST) {
+          this.consumeBuffered("dashBack");
+          this.spendPower(DASH_COST);
+          this.dashDir = -this.facing;
+          this.dashStartX = this.x;
+          this.dashWasAirborne = true;
+          this.setState("dash");
+          this.lastEvent = "dash-start";
+          return;
+        }
         // The actual aerial-attack input: a real, move-specific hitbox (see
         // AIR_ATTACK above and checkAirAttackHit in game.js), not a cosmetic
         // reskin of the grounded kick - costs its own power, has its own
@@ -1563,7 +1782,8 @@ export class Fighter {
       !input.jump &&
       !input.slide &&
       !input.uppercut &&
-      !input.dash
+      !input.dashForward &&
+      !input.dashBack
     ) {
       if (this.state !== "crouch") this.setState("crouch");
       return;
@@ -1660,6 +1880,21 @@ export class Fighter {
       // flight budget, not reset it back to a fresh full jump's worth of
       // airtime for free).
       this.airborneT = 0;
+      // Backward jump (requirement 11) - decided once, right here, off
+      // whichever direction was actually held the instant the jump was
+      // pressed (not re-read again for the rest of the flight - the combined
+      // jump/air-attack branch above only ever reads this.jumpBack, never
+      // input.left/right directly). AWAY from the opponent specifically, not
+      // just "held left" - which physical key that means depends on which
+      // side of the arena this fighter is currently standing on. Neutral (no
+      // direction held) or held TOWARD the opponent both read as a normal
+      // jump (jumpBack stays false) - only a direction that's unambiguously
+      // pointing away counts. towardSign === 0 (exact same x - vanishingly
+      // rare, but possible right as the pair crosses) also falls back to a
+      // normal jump rather than guessing.
+      const heldDir = input.left ? -1 : input.right ? 1 : 0;
+      const towardSign = opponent ? Math.sign(opponent.x - this.x) : 0;
+      this.jumpBack = heldDir !== 0 && towardSign !== 0 && heldDir !== towardSign;
       // A fresh jump always starts a fresh aerial punch chain - see
       // airPunchChainIndex's own constructor comment. Already reset on the
       // PREVIOUS jump's own landing (see the combined jump/air-attack
@@ -1673,17 +1908,31 @@ export class Fighter {
       this.lastEvent = "jump-start";
       return;
     }
-    if ((justPressed.dash || this.hasBuffered("dash")) && this.power >= DASH_COST) {
-      this.consumeBuffered("dash");
+    // Standing dash - forward burns toward the opponent (this.facing),
+    // back burns away from them - two discrete, edge-triggered buttons now
+    // (requirement 11), not one action plus a held-direction read at
+    // activation time the way the old single "dash" worked. dashWasAirborne
+    // explicitly reset false on both entry points - belt-and-suspenders
+    // against a stale `true` somehow surviving from an earlier air dash into
+    // this fresh GROUND one, which would otherwise misroute this dash into
+    // the airborne early-return branch above instead of the ordinary
+    // grounded shared duration-map branch below.
+    if ((justPressed.dashForward || this.hasBuffered("dashForward")) && this.power >= DASH_COST) {
+      this.consumeBuffered("dashForward");
       this.spendPower(DASH_COST);
-      // Direction read once, right here, not re-read every frame of the
-      // burst - holding left/right at the moment of the press picks
-      // backward vs forward; releasing/changing direction mid-dash doesn't
-      // redirect it, same as slide's own direction is locked in on entry.
-      // No direction held defaults to this.facing (always toward the
-      // opponent - see game.js), so a bare dash press is a forward burst.
-      this.dashDir = input.left ? -1 : input.right ? 1 : this.facing;
+      this.dashDir = this.facing;
       this.dashStartX = this.x;
+      this.dashWasAirborne = false;
+      this.setState("dash");
+      this.lastEvent = "dash-start";
+      return;
+    }
+    if ((justPressed.dashBack || this.hasBuffered("dashBack")) && this.power >= DASH_COST) {
+      this.consumeBuffered("dashBack");
+      this.spendPower(DASH_COST);
+      this.dashDir = -this.facing;
+      this.dashStartX = this.x;
+      this.dashWasAirborne = false;
       this.setState("dash");
       this.lastEvent = "dash-start";
       return;
@@ -2032,6 +2281,15 @@ export class Fighter {
   }
 
   takeDamage(amount, fromX, kind) {
+    // Juggle burst immunity (stage 4, requirement 15) - a FULL ignore, not
+    // just a discount, for BURST_IMMUNITY_FRAMES real ticks after a
+    // successful escape (see the burst check at the top of the "juggled"
+    // branch above) - no health lost, no state/comboCount/lastEvent touched
+    // at all, same as this call never happened. Checked before anything
+    // else in this method, including the parry/block gate below, since a
+    // fighter who just burst out is neither blocking nor a normal open
+    // target - they're briefly untouchable, full stop.
+    if (this.burstImmunityT > 0) return;
     // Only a genuine "block" state counts for a perfect parry - stateT here
     // is exactly "frames since block was raised" (see the big comment on
     // PARRY_WINDOW_FRAMES above for why that's reliable).

@@ -32,9 +32,9 @@ import {
   AIR_SPECIAL_KNOCKBACK,
   AIR_KICK_POSES,
   KICK_POSES,
-  SPECIAL,
   ARENA_MIN_X,
   ARENA_MAX_X,
+  ENDER_PUSHOUT,
   computeHitstopFrames,
   computeComboFreezeBonus,
 } from "./fighter.js";
@@ -45,6 +45,10 @@ import { isBloodUnlocked } from "./blood-code.js";
 import { reportMatchResult } from "./api.js";
 import { findGamepad, buildGamepadInput } from "./gamepad.js";
 
+// dash split into dashForward/dashBack (stage 4, requirement 11) - two
+// discrete keys now instead of one action plus a held-direction read. q/z
+// (p1) and o/p (p2) chosen so each pair sits right next to that player's own
+// existing key cluster.
 const KEYMAP = {
   p1: {
     left: "a",
@@ -57,7 +61,8 @@ const KEYMAP = {
     punch: "f",
     kick: "g",
     special: "r",
-    dash: "q",
+    dashForward: "q",
+    dashBack: "z",
   },
   p2: {
     left: "arrowleft",
@@ -70,7 +75,8 @@ const KEYMAP = {
     punch: "k",
     kick: "l",
     special: "j",
-    dash: "o",
+    dashForward: "o",
+    dashBack: "p",
   },
 };
 
@@ -193,6 +199,45 @@ const SLIDE_HIT_RADIUS = 70;
 // ranges (fighter.js) are all sized to clear this with margin.
 const MIN_FIGHTER_GAP = 68;
 
+// --- Combo magnetism (stage 4, requirement 10) ------------------------------
+// A landed hit that ISN'T this combo's own ender (see defender.lastComboEnder,
+// set by takeDamage in fighter.js) nudges the ATTACKER a fixed step toward
+// the DEFENDER, once per hit - not a per-frame pull. There's no clean home
+// for a per-frame version here: every one of the call sites below runs its
+// hit resolution exactly once per landed hit, not once per frame, so a
+// one-shot step per hit is the natural fit for this code, not a compromise.
+// This is what actually walks the attacker underneath a JUGGLED defender
+// (whose own x is a deliberate frozen non-choice everywhere else in this
+// engine - see the "Airborne juggle" comment block in fighter.js) so an air
+// chain's later hits can reliably reach out to their own fixed range instead
+// of whiffing the moment the attacker's own approach falls even a little
+// behind the target.
+const COMBO_MAGNET_PULL = 18;
+// The pair can never be magnetized closer than this - a hair under
+// MIN_FIGHTER_GAP (68) so a magneted attacker still visibly "closes in
+// tight", not "walks straight through" a grounded defender's own solid
+// body (resolveCollision itself is skipped for a juggled target, per its own
+// comment above, so this clamp is the only thing keeping that specific case
+// sane).
+const COMBO_MAGNET_MIN_GAP = 55;
+// Called once per landed, non-blocked, non-parried hit (see each of
+// checkHit/checkUppercutHit/checkAirAttackHit/checkAirPunchHit below) -
+// deliberately gated on defender.state/comboCount rather than needing its
+// own separate "was this a real landed hit" flag: a blocked or parried hit
+// never leaves the defender in "hitstun"/"juggled" (see takeDamage's own
+// blocked/perfect-parry branches, which return before ever touching state),
+// so those cases are naturally excluded here with no extra bookkeeping.
+function applyComboMagnet(attacker, defender) {
+  if (defender.lastComboEnder) return;
+  if (defender.state !== "hitstun" && defender.state !== "juggled") return;
+  if (defender.comboCount < 1) return;
+  const gap = Math.abs(defender.x - attacker.x);
+  const pull = Math.min(COMBO_MAGNET_PULL, Math.max(0, gap - COMBO_MAGNET_MIN_GAP));
+  if (pull <= 0) return;
+  const dir = defender.x >= attacker.x ? 1 : -1;
+  attacker.x = Math.max(ARENA_MIN_X, Math.min(ARENA_MAX_X, attacker.x + dir * pull));
+}
+
 // A fighter counts as "airborne" for every one of the grounded-attack
 // exclusion checks below (checkHit/updateSlide/updateProjectiles' own dodge
 // logic/resolveCollision) the moment they're off the ground for ANY reason -
@@ -269,7 +314,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
   const emptyP2Input = {
     left: false, right: false, block: false, crouch: false, jump: false,
     uppercut: false, slide: false, punch: false, kick: false, special: false,
-    dash: false,
+    dashForward: false, dashBack: false,
   };
   const getAIInput = practiceMode ? null : p2AI ? createAIController(p2, p1) : null;
   const pressed = new Set();
@@ -294,7 +339,8 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       punch: pressed.has(map.punch),
       kick: pressed.has(map.kick),
       special: pressed.has(map.special),
-      dash: pressed.has(map.dash),
+      dashForward: pressed.has(map.dashForward),
+      dashBack: pressed.has(map.dashBack),
     };
   }
 
@@ -776,6 +822,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       // branches, so this naturally falls back to the plain SHAKE_ON_HIT/
       // no-freeze-bonus behavior for anything that isn't a genuine landed
       // hit, with no extra gating needed here.
+      applyComboMagnet(attacker, defender);
       shake = Math.max(shake, defender.lastComboEnder ? SHAKE_ON_ENDER : SHAKE_ON_HIT);
       flash = Math.max(flash, defender.lastComboEnder ? FLASH_ON_ENDER : FLASH_ON_HIT);
       triggerHitstop(box.damage, defender.lastEvent === "hit-taken" || defender.lastEvent === "ko" ? defender.comboCount : 1);
@@ -847,8 +894,13 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       // Flies out over the knockback state's own duration (see
       // setKnockbackMotion/jumpOffset in fighter.js) instead of teleporting
       // straight to the final spot - a real launch-and-land arc, not an
-      // instant snap-then-freeze.
-      defender.setKnockbackMotion(pushDir, SLIDE.knockback);
+      // instant snap-then-freeze. Ender push-out (stage 4, requirement 10) -
+      // an ordinary slide hit still gets its own baseline SLIDE.knockback,
+      // but one landed at real combo depth (defender.lastComboEnder, set by
+      // takeDamage just above) earns the same bigger ENDER_PUSHOUT shove
+      // every other ender-class hit gets instead - a real gap to close, not
+      // just the usual short slide reaction.
+      defender.setKnockbackMotion(pushDir, defender.lastComboEnder ? ENDER_PUSHOUT : SLIDE.knockback);
     }
     attacker.lastEvent = "slide-hit";
     // defender.lastComboEnder/comboCount are only ever touched by
@@ -932,6 +984,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     // defender.comboCount (takeDamage's block branch owns that path
     // instead), so lastComboEnder/comboCount stay at their pre-hit values
     // and this correctly falls back to plain SHAKE_ON_HIT/no freeze bonus.
+    applyComboMagnet(attacker, defender);
     shake = Math.max(shake, defender.lastComboEnder ? SHAKE_ON_ENDER : SHAKE_ON_HIT);
     flash = Math.max(flash, defender.lastComboEnder ? FLASH_ON_ENDER : FLASH_ON_HIT);
     triggerHitstop(attacker.uppercutDamage, defender.lastEvent === "hit-taken" || defender.lastEvent === "ko" ? defender.comboCount : 1);
@@ -993,6 +1046,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       attacker.onLandedHit("airKick");
       attacker.lastEvent = "air-attack-hit";
     }
+    applyComboMagnet(attacker, defender);
     shake = Math.max(shake, defender.lastComboEnder ? SHAKE_ON_ENDER : SHAKE_ON_HIT);
     flash = Math.max(flash, defender.lastComboEnder ? FLASH_ON_ENDER : FLASH_ON_HIT);
     triggerHitstop(attacker.airAttackDamage, defender.lastEvent === "hit-taken" || defender.lastEvent === "ko" ? defender.comboCount : 1);
@@ -1054,6 +1108,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         defender.applyJuggleSpike();
       }
     }
+    applyComboMagnet(attacker, defender);
     shake = Math.max(shake, defender.lastComboEnder ? SHAKE_ON_ENDER : SHAKE_ON_HIT);
     flash = Math.max(flash, defender.lastComboEnder ? FLASH_ON_ENDER : FLASH_ON_HIT);
     triggerHitstop(damage, defender.lastEvent === "hit-taken" || defender.lastEvent === "ko" ? defender.comboCount : 1);
@@ -1291,8 +1346,14 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
           // Direction is the projectile's own flight direction (already
           // pointed away from the caster, toward wherever it was heading) -
           // pushes the target further the way the hit was already traveling.
+          // ENDER_PUSHOUT (stage 4, requirement 10), not SPECIAL.knockback -
+          // the special's own grounded knockback is one of this engine's two
+          // dedicated ender-class push-outs (the other being a real-depth
+          // slide, see updateSlide above), so both share the exact same
+          // bigger shove distance now instead of each move separately tuning
+          // its own smaller number.
           if (target.state === "knockback") {
-            target.setKnockbackMotion(Math.sign(p.facing), SPECIAL.knockback);
+            target.setKnockbackMotion(Math.sign(p.facing), ENDER_PUSHOUT);
           }
           // The bolt gets its own dedicated magic-impact sound instead of
           // the generic special-hit thud everything else shares - it's
@@ -1418,6 +1479,20 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         playSound("hit", { rate: 0.6, volume: 0.9 });
         shake = Math.max(shake, SHAKE_ON_HIT);
         impacts.push({ x: fighter.x + BODY_CENTER_OFFSET, y: GROUND_Y - 10, t: 0 });
+        break;
+      // The juggle burst (stage 4, requirement 15) - fires the instant
+      // fighter.js's own burst check spends the power and exits the juggle
+      // (see that branch's own comment for the full design). Reuses the
+      // block sound (a defensive escape, not an offensive strike) pitched up
+      // slightly to read as a snap rather than a routine chip-block, and the
+      // same energy-burst impact FX every other special/uppercut/spike
+      // moment in this file already reuses, at head height (where the
+      // fighter was still airborne at the instant of the burst), so the
+      // escape reads as a real visible event, not just a silent state swap.
+      case "juggle-burst":
+        playSound("block", { rate: 1.15 });
+        shake = Math.max(shake, SHAKE_ON_HIT);
+        impacts.push({ x: fighter.x + BODY_CENTER_OFFSET, y: HEAD_Y, t: 0 });
         break;
     }
   }

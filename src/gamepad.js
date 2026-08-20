@@ -30,21 +30,31 @@ const TRIGGER_THRESHOLD = 0.5;
 // stick-up, which read as accidental jumps whenever a player was just
 // tilting the stick to move/crouch - it's its own dedicated button now,
 // same as every other action.
-export const REMAPPABLE_ACTIONS = ["jump", "uppercut", "block", "punch", "kick", "slide", "special", "dash"];
+// dash split into dashForward/dashBack (stage 4, requirement 11) - two
+// discrete buttons now instead of one action plus a held-direction read.
+export const REMAPPABLE_ACTIONS = ["jump", "uppercut", "block", "punch", "kick", "slide", "special", "dashForward", "dashBack"];
 
+// Bumpers relocated to make room for the two dash buttons (stage 4): the
+// only genuinely free index left on a standard pad is 11 (R Stick Click - 16
+// "Home" is unreliable across browsers, see BUTTON_NAMES below), so slide
+// moves there and special takes over L Stick Click (freed now that dash no
+// longer lives there), leaving LB/RB free for dashBack/dashForward - bumpers
+// are the natural physical slot for a two-way dash the same way they were
+// for the old single dash. SPECIAL_ALT_BUTTON (RT, below) still works as a
+// second special trigger regardless, and is now the more ergonomic one to
+// actually hold for the ground finisher's arm-window chord (see JUGGLE_
+// FINISHER in fighter.js) - a stick click is awkward to hold through a
+// follow-up punch/kick press, a trigger isn't.
 const DEFAULT_GAMEPAD_MAP = {
   jump: 6, // LT
   uppercut: 0, // A / Cross
   block: 1, // B / Circle
   punch: 2, // X / Square
   kick: 3, // Y / Triangle
-  slide: 4, // LB / L1
-  special: 5, // RB / R1
-  // L Stick Click - genuinely unused by anything else here (movement reads
-  // the stick's axes, not its click; Select/Start(8/9) are reserved for the
-  // menu overlay, D-pad(12-15) is movement/crouch) and "click the stick to
-  // dash/sprint" is a familiar enough convention on its own.
-  dash: 10, // L Stick Click
+  slide: 11, // R Stick Click
+  special: 10, // L Stick Click
+  dashBack: 4, // LB / L1
+  dashForward: 5, // RB / R1
 };
 
 // RT (button 7) always works as an alternate special trigger regardless of
@@ -72,6 +82,17 @@ export function buttonName(index) {
 function loadGamepadMap() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
+    // Stale-map migration (stage 4 dash remap) - a saved single "dash" bind
+    // from before dashForward/dashBack existed at all predates this rework
+    // entirely; carry it over as the forward bind (the old dash's own
+    // default meaning - a bare press burns toward the opponent) rather than
+    // silently dropping a player's own prior rebind. A no-op for anyone who
+    // never touched dash's own binding in the first place, since
+    // DEFAULT_GAMEPAD_MAP's own dashForward already covers them without this.
+    if (saved.dash !== undefined && saved.dashForward === undefined) {
+      saved.dashForward = saved.dash;
+    }
+    delete saved.dash;
     return { ...DEFAULT_GAMEPAD_MAP, ...saved };
   } catch {
     return { ...DEFAULT_GAMEPAD_MAP };
@@ -107,7 +128,7 @@ function emptyInput() {
   return {
     left: false, right: false, block: false, crouch: false, jump: false,
     uppercut: false, slide: false, punch: false, kick: false, special: false,
-    dash: false,
+    dashForward: false, dashBack: false,
   };
 }
 
@@ -173,7 +194,8 @@ export function buildGamepadInput(gp) {
   input.kick = isPressed(gp, map.kick);
   input.slide = isPressed(gp, map.slide);
   input.special = isPressed(gp, map.special) || isPressed(gp, SPECIAL_ALT_BUTTON);
-  input.dash = isPressed(gp, map.dash);
+  input.dashForward = isPressed(gp, map.dashForward);
+  input.dashBack = isPressed(gp, map.dashBack);
 
   return input;
 }
