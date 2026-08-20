@@ -1098,6 +1098,16 @@ export class Fighter {
     // decremented once per real update() tick, checked first thing in
     // takeDamage below (a full ignore, not a discount, while > 0).
     this.burstImmunityT = 0;
+    // Fix for the juggle-burst reliability bug caught in post-build review:
+    // block was checked via a bare justPressed.block with no buffering at
+    // all, so a press landing during a hitstop-frozen tick (update()'s
+    // "juggled" branch below doesn't run on frozen ticks - see
+    // tickInputOnly()) was silently discarded even though _trackInput()
+    // still captured the edge that same tick. Dedicated countdown (not
+    // folded into the shared bufferedAction/bufferTtl slot used by
+    // BUFFERABLE_ACTIONS) so a queued burst can never be evicted by an
+    // unrelated punch/kick/special press racing it for the one shared slot.
+    this.burstBufferT = 0;
     // Single-frame-lived flags, same lifecycle as lastEvent (reset to a
     // neutral value at the top of every update(), only ever set true inside
     // takeDamage for the exact frame a real hit lands on this fighter) - see
@@ -1188,6 +1198,11 @@ export class Fighter {
       this.bufferTtl--;
       if (this.bufferTtl <= 0) this.bufferedAction = null;
     }
+    // Same aging rule as bufferTtl above, kept as its own dedicated
+    // countdown (see the constructor comment on burstBufferT) rather than
+    // sharing BUFFERABLE_ACTIONS' single slot.
+    if (this.burstBufferT > 0) this.burstBufferT--;
+    if (justPressed.block) this.burstBufferT = INPUT_BUFFER_FRAMES;
     // A fresh press always overwrites whatever was previously buffered and
     // resets the window - latest press wins, checked in BUFFERABLE_ACTIONS
     // priority order so two buttons hit the same tick buffer the more
@@ -1309,7 +1324,8 @@ export class Fighter {
       // it out early/whiff it the way a real move could be. opponent (this
       // fighter's actual attacker in this exact matchup) is what
       // BURST_PUSHOUT's own direction is computed away from.
-      if (justPressed.block && this.power >= BURST_COST) {
+      if ((justPressed.block || this.burstBufferT > 0) && this.power >= BURST_COST) {
+        this.burstBufferT = 0;
         this.spendPower(BURST_COST);
         this.juggleY = 0;
         this.juggleVY = 0;
@@ -1871,18 +1887,25 @@ export class Fighter {
       // Still worth waiting only while special is still physically held AND
       // the opponent is still airborne to grab - the instant either goes
       // false, or this countdown itself simply runs out, the window closes.
+      // NOTE: a released special is ITSELF a closing condition, not a reason
+      // to abandon the fallback - see the fix below for why the fallback no
+      // longer re-checks input.special.
       const stillWorthArming = input.special && opponent && opponent.state === "juggled";
       if (!stillWorthArming || this.finisherArmT <= 0) {
         this.finisherArmT = 0;
-        // Never silently eat the player's original press/power - if a
-        // finisher never came, the plain ranged special still fires right
-        // here (up to FINISHER_ARM_FRAMES late), as long as special is
-        // genuinely still held and still affordable. A press that arrived
-        // while power sat between SPECIAL.cost and JUGGLE_FINISHER.cost
-        // (50-59) still falls through to this exact path on expiry, per
-        // design - it was always eligible for the plain special, it just
-        // also got a shot at arming for the finisher first.
-        if (input.special && this.power >= SPECIAL.cost) {
+        // Post-build-review fix: this used to gate on `input.special &&`,
+        // i.e. the CURRENT live button level. A quick tap-and-release of
+        // special (well within FINISHER_ARM_FRAMES) sets stillWorthArming
+        // false the SAME tick input.special goes false, landing here with
+        // input.special already false - the exact same fix-required tick
+        // where the fallback most needs to fire, silently eating the press
+        // instead. Arming itself already proved a real justPressed.special
+        // at sufficient power (see the entry check below); nothing in this
+        // branch spends power while armed, so re-checking only the cost
+        // here (never the live button level) never fires a special that
+        // wasn't actually earned, and now fires it on expiry OR release
+        // instead of neither.
+        if (this.power >= SPECIAL.cost) {
           this.spendPower(SPECIAL.cost);
           this.setState("special");
           this.lastEvent = "special-start";
@@ -2129,7 +2152,13 @@ export class Fighter {
     // a fresh full-height arc once "jump" resumed after it. One continuous
     // flight, one continuous formula, sourced from the one counter that
     // actually persists across the whole thing.
-    if (this.state === "jump" || this.state === "airKick" || this.state === "flyingKick") {
+    if (
+      this.state === "jump" ||
+      this.state === "airKick" ||
+      this.state === "flyingKick" ||
+      AIR_PUNCH_STATES.includes(this.state) ||
+      (this.state === "dash" && this.dashWasAirborne)
+    ) {
       const t = Math.min(1, this.airborneT / JUMP_DURATION);
       return JUMP_HEIGHT * 4 * t * (1 - t);
     }

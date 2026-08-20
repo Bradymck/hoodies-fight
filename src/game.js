@@ -273,8 +273,18 @@ function applyComboMagnet(attacker, defender) {
 // instead of repeating the same four-state OR chain at every call site
 // below - same reasoning KICK_POSES already collapses several pose variants
 // into one classification for.
-function isAirborne(state) {
-  return state === "jump" || state === "juggled" || state === "airKick" || state === "flyingKick";
+const AIR_PUNCH_STATE_SET = new Set(AIR_PUNCH_CHAIN.map((move) => move.state));
+
+function isAirborne(fighter) {
+  const state = fighter.state;
+  return (
+    state === "jump" ||
+    state === "juggled" ||
+    state === "airKick" ||
+    state === "flyingKick" ||
+    AIR_PUNCH_STATE_SET.has(state) ||
+    (state === "dash" && fighter.dashWasAirborne)
+  );
 }
 
 // Pushes both fighters apart symmetrically whenever they'd overlap, instead
@@ -304,7 +314,7 @@ function isAirborne(state) {
 // reason - the attacker throwing an air attack while closing in on a
 // juggled opponent is exactly the case this exists to not shove apart.
 function resolveCollision(a, b) {
-  if (isAirborne(a.state) || isAirborne(b.state)) return;
+  if (isAirborne(a) || isAirborne(b)) return;
   const dx = b.x - a.x;
   if (Math.abs(dx) >= MIN_FIGHTER_GAP) return;
   const dir = dx >= 0 ? 1 : -1;
@@ -819,7 +829,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     // deliberate exception, for the same reason - reaching a still-juggled
     // opponent is the entire point of that move too, even though it's
     // otherwise thrown from the ground like an ordinary punch/kick.
-    if (isAirborne(defender.state) && box.kind !== "finisher") return;
+    if (isAirborne(defender) && box.kind !== "finisher") return;
     // Ducking clears kicks clean over the top - punches still connect
     // through a crouch, only the low kick whiffs. blockLow (crouch+block
     // held together - see fighter.js's update()) is still physically
@@ -918,7 +928,7 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
     // isAirborne() - same as checkHit above - a ground-level sweep can't
     // connect with someone who's genuinely up in the air, whether that's a
     // jump, a launcher juggle, or their own air attack in progress.
-    if (isAirborne(defender.state)) return;
+    if (isAirborne(defender)) return;
     const attackerCenterX = attacker.x + BODY_CENTER_OFFSET;
     const defenderCenterX = defender.x + BODY_CENTER_OFFSET;
     if (Math.abs(attackerCenterX - defenderCenterX) >= SLIDE_HIT_RADIUS) return;
@@ -1380,8 +1390,8 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       // voluntary jump already does, rather than the projectile silently
       // hitting a target it was never aimed at vertically.
       const dodged = isRatRush
-        ? isAirborne(target.state)
-        : isAirborne(target.state) || target.state === "crouch" || target.state === "blockLow";
+        ? isAirborne(target)
+        : isAirborne(target) || target.state === "crouch" || target.state === "blockLow";
       if (!dodged) {
         const targetCenterX = target.x + BODY_CENTER_OFFSET;
         const hitRadius = isRatRush ? RAT_RUSH_HIT_RADIUS : PROJECTILE_HIT_RADIUS;
