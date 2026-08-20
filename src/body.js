@@ -65,8 +65,22 @@ export const HEAD_POP_DURATION = 30;
 const SHEETS = {
   idle: { img: loadImg("assets/sprites/idle.png"), frameSize: 78 },
   walk: { img: loadImg("assets/sprites/walk.png"), frameSize: 86 },
-  attack: { img: loadImg("assets/sprites/attack.png"), frameSize: 86 },
   kick: { img: loadImg("assets/sprites/kick.png"), frameSize: 86 },
+  // The kick chain's 2nd hit (fighter.js's "kick2" state, KICK_CHAIN) - a
+  // dedicated high-kick sheet. The chain's 3rd hit (kick3) doesn't need a
+  // sheet of its own here - it reuses specialHigh below wholesale (see
+  // ANIMS.kick3's own comment).
+  highKick: { img: loadImg("assets/sprites/high-kick.png"), frameSize: 86 },
+  // The 3-hit punch chain's own dedicated sheets (fighter.js's punch1/
+  // punch2/punch3 states) - the old single "attack" sheet is gone, replaced
+  // by real per-hit art. elbow doubles as the aerial chain's OPENER
+  // (airPunch1) and punchDown doubles as both the aerial chain's FINISHER
+  // and the always-free crouch punch - see ANIMS below for the exact
+  // state->sheet wiring.
+  punchJab: { img: loadImg("assets/sprites/punch-jab.png"), frameSize: 86 },
+  punchCross: { img: loadImg("assets/sprites/punch-cross.png"), frameSize: 86 },
+  elbow: { img: loadImg("assets/sprites/elbow.png"), frameSize: 86 },
+  punchDown: { img: loadImg("assets/sprites/punch-down.png"), frameSize: 86 },
   jump: { img: loadImg("assets/sprites/jump.png"), frameSize: 86 },
   hurt: { img: loadImg("assets/sprites/hurt.png"), frameSize: 78 },
   // Replaced with a real collapse-and-fall animation - the old file here was
@@ -83,11 +97,21 @@ const SHEETS = {
   // Post-match victory pose - only ever entered externally by game.js when
   // a round ends, never by player input.
   flex: { img: loadImg("assets/sprites/flex.png"), frameSize: 78 },
-  // Builder/Hodler's dedicated melee specials (see fighter.js's
-  // specialHigh/specialLow states) - a real high/low kick each, instead of
-  // sharing the ranged-cast "spellcast" pose every other archetype uses.
+  // Formerly Builder/Hodler's own dedicated melee-special sheets - both
+  // archetypes now share the plain ranged-cast "spellcast" pose instead (see
+  // fighter.js's stage-3 archetype-specials rework). Kept here wholesale,
+  // not deleted - the kick chain's own ender (kick3) and the free crouch
+  // kick (crouchKick) already repurposed these two sheets as real move art
+  // of their own back in stage 2 (see ANIMS.kick3/ANIMS.crouchKick below).
   specialHigh: { img: loadImg("assets/sprites/special-high.png"), frameSize: 78 },
   specialLow: { img: loadImg("assets/sprites/special-low.png"), frameSize: 68 },
+  // Optional victory-showcase-only pose (stage 5, requirement 5) - a relaxed
+  // boxing guard idle loop, never entered by player input, only cycled into
+  // post-round alongside "flex"/"idle" (see VICTORY_POSES in game.js).
+  // Generated art confirmed present and correctly sliced (624px wide / 78px
+  // frameSize = exactly 8 frames) before wiring in here, per the plan's own
+  // "verify frame count before wiring into SHEETS" gotcha.
+  boxIdle: { img: loadImg("assets/sprites/boxing-idle.png"), frameSize: 78 },
 };
 
 // Per-frame neck/collar anchor points, sampled directly from each sheet's
@@ -100,8 +124,25 @@ const SHEETS = {
 const HEAD_ANCHORS = {
   idle: [{"x":37.8,"y":-7},{"x":37.8,"y":-7},{"x":37.8,"y":-7},{"x":38.3,"y":-7},{"x":38.8,"y":-7},{"x":38.8,"y":-7},{"x":38.5,"y":-7},{"x":37.8,"y":-7}],
   walk: [{"x":40.9,"y":6},{"x":42.5,"y":5},{"x":41.4,"y":4},{"x":42.1,"y":3},{"x":40.5,"y":5},{"x":40.9,"y":6},{"x":42.2,"y":4},{"x":41.8,"y":3}],
-  attack: [{"x":42.0,"y":2},{"x":41.3,"y":1},{"x":40.9,"y":2},{"x":37.0,"y":4},{"x":33.3,"y":1},{"x":47.8,"y":0},{"x":49.8,"y":3},{"x":47.3,"y":2}],
   kick: [{"x":42.0,"y":2},{"x":41.1,"y":3},{"x":39.8,"y":3},{"x":33.8,"y":3},{"x":43.5,"y":1},{"x":40.7,"y":-2},{"x":45.7,"y":5},{"x":42.3,"y":2}],
+  // kick2 - new 8-frame high-kick sheet, seeded from kick's own anchor
+  // points above (same rough head-follows-strike shape a kick always had),
+  // same first-pass-placeholder treatment the new punch sheets below got in
+  // stage 1 - not hand-tuned per sheet yet.
+  kick2: [{"x":42.0,"y":2},{"x":41.1,"y":3},{"x":39.8,"y":3},{"x":33.8,"y":3},{"x":43.5,"y":1},{"x":40.7,"y":-2},{"x":45.7,"y":5},{"x":42.3,"y":2}],
+  // New 8-frame punch-chain sheets - seeded from the old "attack" sheet's
+  // own anchor points (same rough head-follows-swing shape a punch always
+  // had) rather than a flat/centered guess, since the new art shares the
+  // same general punching-motion silhouette. First-pass placeholder, not
+  // hand-tuned per sheet - a later art pass can nudge each of these
+  // independently once someone's eyeballing the actual frames live.
+  punchJab: [{"x":42.0,"y":2},{"x":41.3,"y":1},{"x":40.9,"y":2},{"x":37.0,"y":4},{"x":33.3,"y":1},{"x":47.8,"y":0},{"x":49.8,"y":3},{"x":47.3,"y":2}],
+  punchCross: [{"x":42.0,"y":2},{"x":41.3,"y":1},{"x":40.9,"y":2},{"x":37.0,"y":4},{"x":33.3,"y":1},{"x":47.8,"y":0},{"x":49.8,"y":3},{"x":47.3,"y":2}],
+  elbow: [{"x":42.0,"y":2},{"x":41.3,"y":1},{"x":40.9,"y":2},{"x":37.0,"y":4},{"x":33.3,"y":1},{"x":47.8,"y":0},{"x":49.8,"y":3},{"x":47.3,"y":2}],
+  // punchDown is a downward overhead slam - anchor nudged lower (+y) across
+  // the back half of the sequence than the other three, roughly tracking a
+  // head/torso leaning into a downward strike rather than a level punch.
+  punchDown: [{"x":42.0,"y":0},{"x":41.3,"y":0},{"x":40.9,"y":2},{"x":39.0,"y":6},{"x":38.3,"y":10},{"x":39.8,"y":8},{"x":41.8,"y":4},{"x":42.3,"y":2}],
   jump: [{"x":42.0,"y":2},{"x":41.0,"y":2},{"x":41.6,"y":6},{"x":42.9,"y":11},{"x":45.3,"y":-3},{"x":41.5,"y":-5},{"x":40.9,"y":-2},{"x":41.3,"y":3}],
   hurt: [{"x":37.8,"y":-7},{"x":37.7,"y":-7},{"x":37.5,"y":-7},{"x":38.0,"y":-6},{"x":39.0,"y":-7},{"x":38.7,"y":-6},{"x":37.5,"y":-7},{"x":37.8,"y":-7}],
   // Single static pose - hunched crouch leaves very little headroom above
@@ -129,6 +170,12 @@ const HEAD_ANCHORS = {
   uppercut: [{"x":38.9,"y":9},{"x":48.2,"y":-5},{"x":42.4,"y":-7}],
   // 8-frame crouch-into-flex victory pose - same sampling method.
   flex: [{"x":37.8,"y":-7},{"x":38.4,"y":-4},{"x":38.0,"y":5},{"x":38.0,"y":7},{"x":37.9,"y":7},{"x":41.3,"y":5},{"x":42.8,"y":-1},{"x":40.0,"y":-2}],
+  // Optional victory-showcase boxing-guard idle loop (stage 5, requirement
+  // 5) - a relaxed near-still stance, seeded from idle's own anchor points
+  // (same rough "barely moves frame to frame" shape a standing idle loop
+  // always has) as a first-pass placeholder, same treatment the stage 1/2
+  // punch/kick sheets got.
+  boxIdle: [{"x":37.8,"y":-7},{"x":37.8,"y":-7},{"x":37.8,"y":-7},{"x":38.3,"y":-7},{"x":38.8,"y":-7},{"x":38.8,"y":-7},{"x":38.5,"y":-7},{"x":37.8,"y":-7}],
   // 15-frame high-kick special (Builder) - windup/lean, kick, recovery.
   // Sampled the same way as every other multi-frame sheet; no fist/arm to
   // hijack it this time since it's a leg strike, values track the head/
@@ -148,6 +195,19 @@ const HEAD_ANCHORS = {
   // the neck in every frame) instead of raw silhouette height.
   death: [{"x":11.6,"y":10.9},{"x":10.6,"y":12.9},{"x":7.3,"y":24.3},{"x":8.3,"y":33.4},{"x":8.4,"y":38.6},{"x":9.0,"y":40.0},{"x":8.8,"y":42.4},{"x":8.5,"y":43.0}],
 };
+// kick3 reuses specialHigh's own sheet wholesale (see ANIMS.kick3 above) -
+// same frames, so its head anchors are copied verbatim (a live reference,
+// not a duplicated second copy of the same 15-point array that could drift
+// out of sync with it) rather than re-sampled.
+HEAD_ANCHORS.kick3 = HEAD_ANCHORS.specialHigh;
+// crouchKick reuses specialLow's own sheet the same way.
+HEAD_ANCHORS.crouchKick = HEAD_ANCHORS.specialLow;
+// Ground finisher (requirement 9) - finisherPunch reuses punchDown's own
+// sheet wholesale, finisherKick reuses kick2's own highKick sheet wholesale
+// (see ANIMS.finisherPunch/ANIMS.finisherKick above) - same live-reference
+// copy pattern as kick3/crouchKick just above, not a re-sample.
+HEAD_ANCHORS.finisherPunch = HEAD_ANCHORS.punchDown;
+HEAD_ANCHORS.finisherKick = HEAD_ANCHORS.kick2;
 
 // Head art is always drawn upright by default (fine for every standing/
 // crouching pose) - but the death collapse actually tips the body over from
@@ -170,8 +230,30 @@ const ANIMS = {
   // arc than before so a jump can actually clear over the other fighter
   // instead of just hopping in place.
   jump: { sheet: "jump", frames: 8, durationFrames: 48, loop: false },
-  punch: { sheet: "attack", frames: 8, durationFrames: 22, loop: false },
+  // The 3-hit standing punch chain (fighter.js's PUNCH_CHAIN) - each hit its
+  // own real sheet/duration now instead of one shared "attack" pose repeated
+  // three times. durationFrames match each PUNCH_CHAIN entry's own
+  // `duration` exactly, same convention every other move's ANIMS entry here
+  // already follows.
+  punch1: { sheet: "punchJab", frames: 8, durationFrames: 18, loop: false },
+  punch2: { sheet: "punchCross", frames: 8, durationFrames: 22, loop: false },
+  punch3: { sheet: "elbow", frames: 8, durationFrames: 24, loop: false },
   kick: { sheet: "kick", frames: 8, durationFrames: 34, loop: false },
+  // The 3-hit standing kick chain's own remaining two hits (fighter.js's
+  // KICK_CHAIN) - kick2 gets a dedicated new sheet (highKick), kick3 reuses
+  // Builder's old specialHigh sheet wholesale as the chain's flourish ender
+  // (see checkHit's own kick3-specific FX branch in game.js) rather than
+  // needing new art of its own - a real 15-frame animation "for free".
+  // durationFrames match each KICK_CHAIN entry's own `duration`.
+  kick2: { sheet: "highKick", frames: 8, durationFrames: 26, loop: false },
+  kick3: { sheet: "specialHigh", frames: 15, durationFrames: 34, loop: false },
+  // Free, always-available crouch kick (fighter.js's CROUCH_KICK) - reuses
+  // Hodler's old specialLow sheet wholesale, same "borrow an existing sheet
+  // for a new state" move kick3 above makes. durationFrames matches
+  // CROUCH_KICK.duration, not the old HODLER_SPECIAL.duration it happens to
+  // share a value with today - see CROUCH_KICK's own comment in fighter.js
+  // for why these are deliberately separate numbers, not a shared reference.
+  crouchKick: { sheet: "specialLow", frames: 7, durationFrames: 28, loop: false },
   // durationFrames (30) matches SPECIAL.release in fighter.js exactly, so
   // the cast finishes on the sheet's last (fullest-charge) frame right as
   // the projectile fires - frameIndex clamps to that last frame for the
@@ -200,11 +282,28 @@ const ANIMS = {
   // much longer the post-match display runs - not looped, so it doesn't
   // visibly crouch back down and repeat mid-celebration.
   flex: { sheet: "flex", frames: 8, durationFrames: 40, loop: false },
-  // durationFrames (45)/(28) match BUILDER_SPECIAL.duration/HODLER_SPECIAL.duration
-  // in fighter.js - active-hitbox window (game.js) is timed to whichever
-  // frames the sheet's own impact FX actually shows the kick connecting.
-  specialHigh: { sheet: "specialHigh", frames: 15, durationFrames: 45, loop: false },
-  specialLow: { sheet: "specialLow", frames: 7, durationFrames: 28, loop: false },
+  // Optional victory-showcase pose (stage 5, requirement 5) - loops
+  // seamlessly (unlike flex, which plays once and holds), cycled into
+  // post-round alongside flex/idle by game.js's endRound showcase, never
+  // entered by any player-input path.
+  boxIdle: { sheet: "boxIdle", frames: 8, cyclesPerSec: 1, loop: true },
+  // Builder/Hodler's own dedicated "specialHigh"/"specialLow" MOVE STATES are
+  // gone (stage 3, requirement 6 - see fighter.js's own archetype-specials
+  // rework comment) - every archetype now shares the plain "special" ranged-
+  // cast pose above instead. The two SHEETS themselves stay in SHEETS above
+  // wholesale (kick3/crouchKick, stage 2, already repurposed them as real
+  // move art of their own - see those two ANIMS entries above), just with no
+  // ANIMS entry of their own left pointing a STATE at them anymore.
+  //
+  // Ground finisher (requirement 9) - a "get over here" gap-close + slam
+  // move, only reachable while an opponent is mid-juggle (see JUGGLE_FINISHER
+  // and the arm-window entry in fighter.js's update()). No new art needed:
+  // finisherPunch reuses the same punchDown sheet the aerial chain's own
+  // finisher/free crouch punch already share (a two-handed downward slam
+  // reads fine as this move's payoff too), finisherKick reuses kick2's
+  // highKick sheet. durationFrames match JUGGLE_FINISHER.duration exactly.
+  finisherPunch: { sheet: "punchDown", frames: 8, durationFrames: 34, loop: false },
+  finisherKick: { sheet: "highKick", frames: 8, durationFrames: 34, loop: false },
   // Crouching guard (fighter.js's "blockLow" state, entered by holding
   // block+crouch together - see the high/low guard mixup in its takeDamage).
   // The engine this was ported from wires this into a dedicated art still;
@@ -226,6 +325,35 @@ const ANIMS = {
   // two names even though they render identically today.
   airKick: { sheet: "kick", frames: 1, durationFrames: 16, loop: false },
   flyingKick: { sheet: "kick", frames: 1, durationFrames: 16, loop: false },
+  // Aerial punch chain (fighter.js's AIR_PUNCH_CHAIN) - airPunch1 opens on
+  // the same elbow sheet punch3 (the grounded chain's own ender) uses,
+  // airPunch2/3 cycle back through the jab/cross sheets, and punchDown (the
+  // chain's finisher, both here and reused below for the free crouch punch)
+  // is the one genuinely new full-cycle pose - a real overhead slam, not a
+  // held single frame the way airKick/flyingKick above still are.
+  // durationFrames match each AIR_PUNCH_CHAIN entry's own `duration`.
+  airPunch1: { sheet: "elbow", frames: 8, durationFrames: 16, loop: false },
+  airPunch2: { sheet: "punchJab", frames: 8, durationFrames: 16, loop: false },
+  airPunch3: { sheet: "punchCross", frames: 8, durationFrames: 16, loop: false },
+  punchDown: { sheet: "punchDown", frames: 8, durationFrames: 20, loop: false },
+  // Free crouching punch (fighter.js's CROUCH_PUNCH) - dual-uses the exact
+  // same punchDown sheet/frame count as the air finisher above (a two-handed
+  // overhead slam reads fine held low too), just its own durationFrames
+  // matching CROUCH_PUNCH.duration.
+  crouchPunch: { sheet: "punchDown", frames: 8, durationFrames: 20, loop: false },
+  // Bonus fix, zero new art: juggled fighters (fighter.js's "juggled" state -
+  // a real airborne physics state, see its own big comment block there) had
+  // NO entry here at all, so drawFighter's own `ANIMS[state] || ANIMS.idle`
+  // fallback silently rendered them standing calmly in "idle" mid-launch -
+  // visually wrong on every single juggle in the game, launcher or air-combo
+  // alike. Reuses the existing "hurt" sheet (the same one plain hitstun
+  // already uses) rather than needing dedicated art - a held/cycling pained
+  // pose reads fine for "airborne and getting juggled". Looping (not a fixed
+  // durationFrames) since the juggled state's own real physics duration
+  // varies with how many times it gets relaunched/extended - there's no
+  // single fixed length to hold a non-looping animation to the way every
+  // other timed pose above has.
+  juggled: { sheet: "hurt", frames: 8, cyclesPerSec: 1.5, loop: true },
 };
 
 const TINTS = {
@@ -290,14 +418,21 @@ export function drawFighter(ctx, fighter, playerNum) {
   // the plain crouch pose does below, or it'd render at the wrong scale
   // relative to every other pose despite drawing off identical pixels.
   const isCrouch = state === "crouch" || state === "blockLow";
-  // Crouch, specialLow, and ko all scale the body around the same bottom-
+  // Crouch, crouchKick, and ko all scale the body around the same bottom-
   // center pivot (crouch shrinks, the other two grow) - see the comments on
   // SPECIAL_LOW_EXTRA_SCALE/DEATH_EXTRA_SCALE above for why. null means "no
   // correction needed". Folded into one shared branch (rather than a
   // separate one for ko) so the head-anchor pivot correction below - which
   // keys off this same variable - automatically covers ko too now that the
   // head is drawn for it.
-  const extraScale = isCrouch ? CROUCH_EXTRA_SCALE : state === "specialLow" ? SPECIAL_LOW_EXTRA_SCALE : state === "ko" ? DEATH_EXTRA_SCALE : null;
+  // "crouchKick" (fighter.js's free crouch kick, stage 2) reuses the old
+  // specialLow SHEET wholesale (see ANIMS.crouchKick above, and SHEETS'
+  // own comment on why that sheet is kept around despite the specialLow
+  // MOVE STATE itself being gone as of stage 3) - it needs this exact same
+  // correction, drawing off the identical underfilled-frame art specialLow
+  // itself always did. There's no longer a literal "specialLow" STATE to
+  // check for directly (nothing ever sets fighter.state to it anymore).
+  const extraScale = isCrouch ? CROUCH_EXTRA_SCALE : state === "crouchKick" ? SPECIAL_LOW_EXTRA_SCALE : state === "ko" ? DEATH_EXTRA_SCALE : null;
 
   // The crouch source art draws the character filling notably more of its
   // frame than every other sheet (measured ~69% of frame width vs ~47% for
@@ -573,15 +708,29 @@ export function drawRatRush(ctx, x, y, frame, facing) {
 const ENERGY_BURST_SHEET = loadImg("assets/fx/energy-burst.png");
 const ENERGY_BURST_FRAME = 80;
 export const ENERGY_BURST_TOTAL_FRAMES = 5;
-const ENERGY_BURST_DRAW_SCALE = 1.6;
+// Trimmed 1.6 -> 0.7 (stage 5, requirement 14) - at the old scale this burst
+// drew at ~128px, comfortably bigger than the ~109px character it was
+// supposed to be attached to (limb-scale FX reads as landing ON the hit, not
+// dwarfing the fighter throwing it). ~56px now.
+const ENERGY_BURST_DRAW_SCALE = 0.7;
 
-export function drawEnergyBurst(ctx, x, y, frame) {
+// facing (stage 5, requirement 14) - optional, defaults to 1 (unflipped) so
+// any call site that doesn't have an obvious "which way was this hit
+// travelling" concept (there are several - this burst is reused for the KO
+// spike-landing thud, the juggle-burst escape, projectile impacts, etc, not
+// every one of which has a clean single attacker) can still call this
+// exactly as before. Mirrors the same ctx.scale(-1,1)-around-the-draw-point
+// pattern drawSurgeBlast already uses for the ranged bolt, so a burst spawned
+// off a leftward-facing hit doesn't render as a mirror-identical blob to one
+// spawned off a rightward one.
+export function drawEnergyBurst(ctx, x, y, frame, facing = 1) {
   if (!ENERGY_BURST_SHEET.complete || ENERGY_BURST_SHEET.naturalWidth === 0) return;
   const f = Math.min(ENERGY_BURST_TOTAL_FRAMES - 1, Math.max(0, frame));
   const size = ENERGY_BURST_FRAME * ENERGY_BURST_DRAW_SCALE;
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   ctx.translate(x, y);
+  if (facing === -1) ctx.scale(-1, 1);
   ctx.drawImage(
     ENERGY_BURST_SHEET,
     f * ENERGY_BURST_FRAME,
@@ -610,13 +759,22 @@ const HIT_SPARK_FRAME = 72;
 export const HIT_SPARK_TOTAL_FRAMES = 2;
 const HIT_SPARK_DRAW_SCALE = 0.75;
 
-export function drawHitSpark(ctx, x, y, frame) {
+// facing/rotationDeg (stage 5, requirement 14) - both optional, default to
+// "no change" (facing 1 = unflipped, rotation 0 = as-authored) so this stays
+// a drop-in call for anywhere that doesn't have a meaningful direction.
+// rotationDeg is how vertical-traveling hits (uppercut launching UP,
+// punchDown/finisher/juggle-spike slamming DOWN) get a genuinely different
+// orientation than a horizontal punch/kick's spark, same idea the swish FX
+// already applies via its own rotation param in game.js.
+export function drawHitSpark(ctx, x, y, frame, facing = 1, rotationDeg = 0) {
   if (!HIT_SPARK_SHEET.complete || HIT_SPARK_SHEET.naturalWidth === 0) return;
   const f = Math.min(HIT_SPARK_TOTAL_FRAMES - 1, Math.max(0, frame));
   const size = HIT_SPARK_FRAME * HIT_SPARK_DRAW_SCALE;
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   ctx.translate(x, y);
+  if (rotationDeg) ctx.rotate((rotationDeg * Math.PI) / 180);
+  if (facing === -1) ctx.scale(-1, 1);
   ctx.drawImage(
     HIT_SPARK_SHEET,
     f * HIT_SPARK_FRAME,
@@ -678,32 +836,50 @@ const COMBO_POW_IMG = loadImg("assets/fx/small_pow.png");
 const COMBO_POW_BIG_IMG = loadImg("assets/fx/red_pop.png");
 export const COMBO_POW_DURATION = 18;
 
-export function drawComboPow(ctx, x, y, t, big, scale = 1) {
+// growth curve trimmed 0.6+progress*0.8 -> 0.5+progress*0.35 (stage 5,
+// requirement 14) - at the old curve this topped out well past the
+// character's own scale on a long combo (comboPowScale in game.js could
+// still push `scale` up to 1.8 on top of this); small_pow now tops out
+// around ~60px instead of ~130px+, reading as limb-scale impact feedback
+// rather than a burst that swallows the fighter. big-mode's own escalation
+// headroom is trimmed separately, in game.js's comboPowScale (1.8 -> 1.0
+// cap) - the KO moment (drawHeadPop below) stays the biggest FX in the game
+// on purpose, so this never grows past it.
+export function drawComboPow(ctx, x, y, t, big, scale = 1, facing = 1) {
   const img = big ? COMBO_POW_BIG_IMG : COMBO_POW_IMG;
   if (!img.complete || img.naturalWidth === 0) return;
   const progress = Math.min(1, t / COMBO_POW_DURATION);
-  const growth = (0.6 + progress * 0.8) * scale;
+  const growth = (0.5 + progress * 0.35) * scale;
   const alpha = 1 - progress;
   const size = img.naturalWidth * growth;
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
+  ctx.translate(x, y);
+  if (facing === -1) ctx.scale(-1, 1);
+  ctx.drawImage(img, -size / 2, -size / 2, size, size);
   ctx.restore();
 }
 
 // Plays once over the KO's head position - scales up and fades out rather
 // than stepping frames, since the source art is one still burst image.
-export function drawHeadPop(ctx, x, y, t) {
+// growth trimmed 0.6+progress*1.4 -> 0.6+progress*0.6 (stage 5, requirement
+// 14) - tops out around ~94px now instead of ~166px+. Still the single
+// biggest FX draw in the game on purpose (the KO moment should read as the
+// biggest beat of any match), just no longer big enough to dwarf the
+// character's own ~109px scale outright.
+export function drawHeadPop(ctx, x, y, t, facing = 1) {
   if (!HEAD_POP_IMG.complete || HEAD_POP_IMG.naturalWidth === 0) return;
   const progress = Math.min(1, t / HEAD_POP_DURATION);
-  const scale = 0.6 + progress * 1.4;
+  const scale = 0.6 + progress * 0.6;
   const alpha = 1 - progress;
   const size = HEAD_POP_IMG.naturalWidth * scale;
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(HEAD_POP_IMG, x - size / 2, y - size / 2, size, size);
+  ctx.translate(x, y);
+  if (facing === -1) ctx.scale(-1, 1);
+  ctx.drawImage(HEAD_POP_IMG, -size / 2, -size / 2, size, size);
   ctx.restore();
 }
 

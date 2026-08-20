@@ -301,10 +301,14 @@ const panelState = {
 // Emoji + flavor text per archetype - the numbers (damage/speed/health/
 // block multipliers) come straight from fighter.js's own ARCHETYPES so this
 // can't drift out of sync with what actually happens in a fight.
+// Special text mirrors game.js's spawnProjectile pairing (stage 3 archetype
+// rework - Flipper+Hodler throw the ground-level rat rush, Builder+Collector
+// throw the head-height bolt; true minimal churn, only the two former-melee
+// archetypes picked up a projectile they didn't already have).
 const ARCHETYPE_INFO = {
-  Builder: { emoji: "🔨", perk: "Hits harder", special: "Special: a big flying high kick" },
+  Builder: { emoji: "🔨", perk: "Hits harder", special: "Special: the long-range bolt" },
   Flipper: { emoji: "⚡", perk: "Moves faster", special: "Special: Hood Rat Rush - a rat swarm along the ground" },
-  Hodler: { emoji: "💎", perk: "More health", special: "Special: a low sweep kick that blocks hits and stops slides cold" },
+  Hodler: { emoji: "💎", perk: "More health", special: "Special: Hood Rat Rush - a rat swarm along the ground" },
   Collector: { emoji: "🛡️", perk: "Blocks better", special: "Special: the long-range bolt" },
 };
 
