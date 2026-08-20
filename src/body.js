@@ -65,8 +65,17 @@ export const HEAD_POP_DURATION = 30;
 const SHEETS = {
   idle: { img: loadImg("assets/sprites/idle.png"), frameSize: 78 },
   walk: { img: loadImg("assets/sprites/walk.png"), frameSize: 86 },
-  attack: { img: loadImg("assets/sprites/attack.png"), frameSize: 86 },
   kick: { img: loadImg("assets/sprites/kick.png"), frameSize: 86 },
+  // The 3-hit punch chain's own dedicated sheets (fighter.js's punch1/
+  // punch2/punch3 states) - the old single "attack" sheet is gone, replaced
+  // by real per-hit art. elbow doubles as the aerial chain's OPENER
+  // (airPunch1) and punchDown doubles as both the aerial chain's FINISHER
+  // and the always-free crouch punch - see ANIMS below for the exact
+  // state->sheet wiring.
+  punchJab: { img: loadImg("assets/sprites/punch-jab.png"), frameSize: 86 },
+  punchCross: { img: loadImg("assets/sprites/punch-cross.png"), frameSize: 86 },
+  elbow: { img: loadImg("assets/sprites/elbow.png"), frameSize: 86 },
+  punchDown: { img: loadImg("assets/sprites/punch-down.png"), frameSize: 86 },
   jump: { img: loadImg("assets/sprites/jump.png"), frameSize: 86 },
   hurt: { img: loadImg("assets/sprites/hurt.png"), frameSize: 78 },
   // Replaced with a real collapse-and-fall animation - the old file here was
@@ -100,8 +109,20 @@ const SHEETS = {
 const HEAD_ANCHORS = {
   idle: [{"x":37.8,"y":-7},{"x":37.8,"y":-7},{"x":37.8,"y":-7},{"x":38.3,"y":-7},{"x":38.8,"y":-7},{"x":38.8,"y":-7},{"x":38.5,"y":-7},{"x":37.8,"y":-7}],
   walk: [{"x":40.9,"y":6},{"x":42.5,"y":5},{"x":41.4,"y":4},{"x":42.1,"y":3},{"x":40.5,"y":5},{"x":40.9,"y":6},{"x":42.2,"y":4},{"x":41.8,"y":3}],
-  attack: [{"x":42.0,"y":2},{"x":41.3,"y":1},{"x":40.9,"y":2},{"x":37.0,"y":4},{"x":33.3,"y":1},{"x":47.8,"y":0},{"x":49.8,"y":3},{"x":47.3,"y":2}],
   kick: [{"x":42.0,"y":2},{"x":41.1,"y":3},{"x":39.8,"y":3},{"x":33.8,"y":3},{"x":43.5,"y":1},{"x":40.7,"y":-2},{"x":45.7,"y":5},{"x":42.3,"y":2}],
+  // New 8-frame punch-chain sheets - seeded from the old "attack" sheet's
+  // own anchor points (same rough head-follows-swing shape a punch always
+  // had) rather than a flat/centered guess, since the new art shares the
+  // same general punching-motion silhouette. First-pass placeholder, not
+  // hand-tuned per sheet - a later art pass can nudge each of these
+  // independently once someone's eyeballing the actual frames live.
+  punchJab: [{"x":42.0,"y":2},{"x":41.3,"y":1},{"x":40.9,"y":2},{"x":37.0,"y":4},{"x":33.3,"y":1},{"x":47.8,"y":0},{"x":49.8,"y":3},{"x":47.3,"y":2}],
+  punchCross: [{"x":42.0,"y":2},{"x":41.3,"y":1},{"x":40.9,"y":2},{"x":37.0,"y":4},{"x":33.3,"y":1},{"x":47.8,"y":0},{"x":49.8,"y":3},{"x":47.3,"y":2}],
+  elbow: [{"x":42.0,"y":2},{"x":41.3,"y":1},{"x":40.9,"y":2},{"x":37.0,"y":4},{"x":33.3,"y":1},{"x":47.8,"y":0},{"x":49.8,"y":3},{"x":47.3,"y":2}],
+  // punchDown is a downward overhead slam - anchor nudged lower (+y) across
+  // the back half of the sequence than the other three, roughly tracking a
+  // head/torso leaning into a downward strike rather than a level punch.
+  punchDown: [{"x":42.0,"y":0},{"x":41.3,"y":0},{"x":40.9,"y":2},{"x":39.0,"y":6},{"x":38.3,"y":10},{"x":39.8,"y":8},{"x":41.8,"y":4},{"x":42.3,"y":2}],
   jump: [{"x":42.0,"y":2},{"x":41.0,"y":2},{"x":41.6,"y":6},{"x":42.9,"y":11},{"x":45.3,"y":-3},{"x":41.5,"y":-5},{"x":40.9,"y":-2},{"x":41.3,"y":3}],
   hurt: [{"x":37.8,"y":-7},{"x":37.7,"y":-7},{"x":37.5,"y":-7},{"x":38.0,"y":-6},{"x":39.0,"y":-7},{"x":38.7,"y":-6},{"x":37.5,"y":-7},{"x":37.8,"y":-7}],
   // Single static pose - hunched crouch leaves very little headroom above
@@ -170,7 +191,14 @@ const ANIMS = {
   // arc than before so a jump can actually clear over the other fighter
   // instead of just hopping in place.
   jump: { sheet: "jump", frames: 8, durationFrames: 48, loop: false },
-  punch: { sheet: "attack", frames: 8, durationFrames: 22, loop: false },
+  // The 3-hit standing punch chain (fighter.js's PUNCH_CHAIN) - each hit its
+  // own real sheet/duration now instead of one shared "attack" pose repeated
+  // three times. durationFrames match each PUNCH_CHAIN entry's own
+  // `duration` exactly, same convention every other move's ANIMS entry here
+  // already follows.
+  punch1: { sheet: "punchJab", frames: 8, durationFrames: 18, loop: false },
+  punch2: { sheet: "punchCross", frames: 8, durationFrames: 22, loop: false },
+  punch3: { sheet: "elbow", frames: 8, durationFrames: 24, loop: false },
   kick: { sheet: "kick", frames: 8, durationFrames: 34, loop: false },
   // durationFrames (30) matches SPECIAL.release in fighter.js exactly, so
   // the cast finishes on the sheet's last (fullest-charge) frame right as
@@ -226,6 +254,35 @@ const ANIMS = {
   // two names even though they render identically today.
   airKick: { sheet: "kick", frames: 1, durationFrames: 16, loop: false },
   flyingKick: { sheet: "kick", frames: 1, durationFrames: 16, loop: false },
+  // Aerial punch chain (fighter.js's AIR_PUNCH_CHAIN) - airPunch1 opens on
+  // the same elbow sheet punch3 (the grounded chain's own ender) uses,
+  // airPunch2/3 cycle back through the jab/cross sheets, and punchDown (the
+  // chain's finisher, both here and reused below for the free crouch punch)
+  // is the one genuinely new full-cycle pose - a real overhead slam, not a
+  // held single frame the way airKick/flyingKick above still are.
+  // durationFrames match each AIR_PUNCH_CHAIN entry's own `duration`.
+  airPunch1: { sheet: "elbow", frames: 8, durationFrames: 16, loop: false },
+  airPunch2: { sheet: "punchJab", frames: 8, durationFrames: 16, loop: false },
+  airPunch3: { sheet: "punchCross", frames: 8, durationFrames: 16, loop: false },
+  punchDown: { sheet: "punchDown", frames: 8, durationFrames: 20, loop: false },
+  // Free crouching punch (fighter.js's CROUCH_PUNCH) - dual-uses the exact
+  // same punchDown sheet/frame count as the air finisher above (a two-handed
+  // overhead slam reads fine held low too), just its own durationFrames
+  // matching CROUCH_PUNCH.duration.
+  crouchPunch: { sheet: "punchDown", frames: 8, durationFrames: 20, loop: false },
+  // Bonus fix, zero new art: juggled fighters (fighter.js's "juggled" state -
+  // a real airborne physics state, see its own big comment block there) had
+  // NO entry here at all, so drawFighter's own `ANIMS[state] || ANIMS.idle`
+  // fallback silently rendered them standing calmly in "idle" mid-launch -
+  // visually wrong on every single juggle in the game, launcher or air-combo
+  // alike. Reuses the existing "hurt" sheet (the same one plain hitstun
+  // already uses) rather than needing dedicated art - a held/cycling pained
+  // pose reads fine for "airborne and getting juggled". Looping (not a fixed
+  // durationFrames) since the juggled state's own real physics duration
+  // varies with how many times it gets relaunched/extended - there's no
+  // single fixed length to hold a non-looping animation to the way every
+  // other timed pose above has.
+  juggled: { sheet: "hurt", frames: 8, cyclesPerSec: 1.5, loop: true },
 };
 
 const TINTS = {

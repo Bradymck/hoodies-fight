@@ -23,13 +23,54 @@ export const ARENA_MAX_X = 625;
 // collision will ever let two fighters stand - or the attack could never
 // connect at point-blank range. Sprite bodies render ~60px wide at full
 // scale, so the enforced gap is ~68px; these all clear it with margin.
-// PUNCH's old range (74) only cleared that by 6px - fine at the absolute
-// closest possible clinch, but two fighters throwing punches at each other
-// rarely sit at exactly that minimum gap, so at any more normal engagement
-// distance the animation's extended-arm reach visually looked like it
-// connected while the actual hitbox (checkHit in game.js) missed and no
-// damage registered. Bumped well past that bare-minimum margin instead.
-const PUNCH = { duration: 22, activeStart: 6, activeEnd: 14, damage: 6, range: 90 };
+//
+// Punch used to be a single move (flat 90-range poke). It's now a 3-hit
+// chain - jab -> cross -> elbow - each hit progressively harder and reaching
+// a touch further, thrown by repeated punch presses (see the chain state
+// machine in update()/enterPunchChain below). All three stay free (cost: 0),
+// same as the old single punch always was - it's still this engine's one
+// truly free poke.
+export const PUNCH_CHAIN = [
+  { state: "punch1", duration: 18, activeStart: 5, activeEnd: 11, damage: 4, range: 90, cost: 0 },
+  { state: "punch2", duration: 22, activeStart: 6, activeEnd: 14, damage: 5, range: 92, cost: 0 },
+  { state: "punch3", duration: 24, activeStart: 7, activeEnd: 16, damage: 7, range: 88, cost: 0 },
+];
+// Quick per-state lookup - attackHitbox() and the cancel/duration machinery
+// below all need "given the current state, which chain entry is this" far
+// more often than "given an index, which entry" (PUNCH_CHAIN itself already
+// covers that).
+const PUNCH_CHAIN_BY_STATE = Object.fromEntries(PUNCH_CHAIN.map((move) => [move.state, move]));
+// Aerial mirror of the grounded chain, thrown mid-jump (see the combined
+// jump/air-attack branch of update() below, same pattern AIR_ATTACK's own
+// airKick/flyingKick already use). Costs real power per hit (unlike the free
+// grounded chain) - a committed aerial swing that can whiff needs a real
+// resource stake, same reasoning AIR_ATTACK's own comment gives. Capped at 4
+// entries: airPunch1/2/3 are ordinary follow-ups, punchDown is the dedicated
+// overhead-slam finisher - only reachable after at least one of the first
+// three has already been thrown this same airtime (see airPunchChainIndex),
+// and the one hit in this whole file that forcibly ends an existing juggle
+// into a hard knockdown instead of continuing it (see checkAirPunchHit in
+// game.js, which calls applyJuggleSpike on a landed punchDown against an
+// already-juggled defender - requirement 2's "slam ends the juggle").
+export const AIR_PUNCH_CHAIN = [
+  { state: "airPunch1", duration: 16, activeStart: 4, activeEnd: 11, damage: 5, range: 85, cost: 8 },
+  { state: "airPunch2", duration: 16, activeStart: 4, activeEnd: 11, damage: 5, range: 88, cost: 8 },
+  { state: "airPunch3", duration: 16, activeStart: 4, activeEnd: 11, damage: 6, range: 88, cost: 10 },
+  { state: "punchDown", duration: 20, activeStart: 6, activeEnd: 13, damage: 10, range: 90, cost: 15 },
+];
+// Free, always-available low poke - fold of the old "specialLow"-shaped idea
+// of a dedicated crouch attack, but with no power cost/special gate (see the
+// dedicated crouch+punch branch in update() below). Reuses the punchDown
+// sheet (see body.js's ANIMS.crouchPunch) rather than needing its own art -
+// a two-handed overhead slam reads fine held low as a low strike too.
+export const CROUCH_PUNCH = { state: "crouchPunch", duration: 20, activeStart: 6, activeEnd: 13, damage: 7, range: 80, cost: 0 };
+// How many real ticks (see punchChainResetT's own constructor comment) a
+// finished chain hit stays "continuable" before the next punch press has to
+// restart the chain at jab instead of picking up where it left off - long
+// enough to cover a landed hit's hitstop+hitstun window plus a normal-speed
+// follow-up press, short enough that a genuinely late, disconnected press
+// reads as a fresh opener rather than a stale continuation.
+export const CHAIN_RESET_FRAMES = 30;
 const KICK = { duration: 34, activeStart: 10, activeEnd: 22, damage: 10, range: 84, cost: 20 };
 // Ranged, not a melee hitbox - the cast animation plays out over `release`
 // frames, then game.js reads "special-release" off lastEvent and spawns a
@@ -148,27 +189,29 @@ export function computeComboFreezeBonus(comboCount) {
 // a real ender without needing any separate "was this dropped" tracking -
 // an incomplete string simply never reaches this gate.
 const COMBO_ENDER_MIN_DEPTH = 3;
-const ENDER_KINDS = new Set(["uppercut", "slide", "special"]);
+// "punchDown" added alongside the pre-existing three - the airborne juggle
+// finisher (see AIR_PUNCH_CHAIN above) is exactly this engine's kind of
+// hard-hitting, resource-committed closer, and game.js explicitly slams it
+// into hard knockdown via applyJuggleSpike on a juggled target (requirement
+// 2) - it needs to read as an ender for the shake/flash escalation the same
+// way uppercut/slide/special already do.
+const ENDER_KINDS = new Set(["uppercut", "slide", "special", "punchDown"]);
 export function isComboEnder(comboCount, kind, isKO) {
   if (isKO) return true;
   return comboCount >= COMBO_ENDER_MIN_DEPTH && ENDER_KINDS.has(kind);
 }
 
 // --- Punch/kick family classification --------------------------------------
-// Upstream (the engine this was ported from) cycles a landed punch/kick
-// through several held-pose "combo string variety" stills (punch2/elbow/
-// downPunch/groundPunch/highKick) as a combo goes deeper - purely cosmetic
-// per-hit sprite variety layered on top of the same PUNCH/KICK move data.
-// OnChainHoodies has no equivalent art for those extra poses (only the base
-// punch/kick sheets), so that layer doesn't port here: every punch plays the
-// same "punch" pose and every kick the same "kick" pose no matter how deep
-// the string runs, exactly like before this workflow. PUNCH_POSES/KICK_POSES
-// are still real exported lists (not just the bare "punch"/"kick" state
-// checks they replace) because moveFamily() below and checkHit's contact-
-// height branch in game.js both need a single place to classify "is this
-// state a punch-family attack" that a future art pass could extend without
-// touching either of those call sites - today each list just has one member.
-export const PUNCH_POSES = ["punch"];
+// Upstream (the engine this was ported from) cycles a landed punch through
+// several held-pose "combo string variety" stills as a combo goes deeper -
+// that's now real here too (see PUNCH_CHAIN above: jab/cross/elbow are
+// genuinely different sheets, not one pose repeated). PUNCH_POSES/KICK_POSES
+// are still real exported lists (not bare per-state checks) because
+// attackHitbox() below and checkHit's contact-height branch in game.js both
+// need a single place to classify "is this state a punch-family attack" -
+// KICK_POSES still has just one member (kick chaining is a later stage), but
+// PUNCH_POSES now genuinely covers all three chain hits.
+export const PUNCH_POSES = ["punch1", "punch2", "punch3"];
 export const KICK_POSES = ["kick"];
 
 // Tall/long enough that the arc actually clears over the other fighter's
@@ -420,6 +463,18 @@ const HARD_KNOCKDOWN_DURATION = 65;
 // need to be the sole deterrent the way it is for a safer grounded poke.
 export const AIR_ATTACK = { duration: 16, activeStart: 5, activeEnd: 13, damage: 11, range: 88, cost: 18 };
 export const AIR_KICK_POSES = ["airKick", "flyingKick"];
+// Plain list of just the state names - the combined jump/air-attack branch
+// of update() below needs this to recognize "is this fighter currently in
+// one of the air-punch chain's four poses" without re-mapping the whole
+// AIR_PUNCH_CHAIN array every check.
+const AIR_PUNCH_STATES = AIR_PUNCH_CHAIN.map((move) => move.state);
+// Per-state pose-hold duration lookup for that same branch's landing/return-
+// to-jump check - airKick/flyingKick both share AIR_ATTACK.duration (16),
+// but each air-punch entry owns its own real duration (see AIR_PUNCH_CHAIN
+// above), so a single shared constant can't cover all of them the way it
+// could when airKick/flyingKick were the only two aerial attack poses.
+const AIR_ATTACK_STATE_DURATIONS = { airKick: AIR_ATTACK.duration, flyingKick: AIR_ATTACK.duration };
+for (const move of AIR_PUNCH_CHAIN) AIR_ATTACK_STATE_DURATIONS[move.state] = move.duration;
 
 // --- Aerial homing special --------------------------------------------------
 // The actual "ranged attack from the air, auto-aimed" move - see
@@ -492,60 +547,63 @@ export const AIR_SPECIAL_KNOCKBACK = 20;
 // graph (or anything whose input didn't land inside the window).
 //
 // The route graph (deliberately small, not "everything cancels into
-// everything" - that would just be the old bug with extra steps):
-//   punch    -> uppercut, kick   the "jab into launcher" opener; a punch is
-//                                 the one move plain enough to lead into
-//                                 either a bigger strike (uppercut) or a
-//                                 height-varied follow-up (kick)
-//   kick     -> uppercut         kick, the HIGH starter, sets up the same
-//                                 anti-air-shaped launcher a punch can
-//   slide    -> uppercut         slide, the LOW starter, converges on the
-//                                 exact same launcher route kick does - see
-//                                 takeDamage's high/low guard mixup below for
-//                                 why these two are the deliberate high/low
-//                                 pair
-//   uppercut -> (nothing)        already this engine's biggest "ender" class
-//                                 hit (see isComboEnder above) - it's the
-//                                 string's natural stopping point for now,
-//                                 not a step to cancel out of
-// Notably absent: punch->punch and kick->kick. Repeating the exact same move
-// never appears as its own target anywhere in this graph - mashing one
-// button can still land two separate, real-gap-recovered pokes if the
-// timing genuinely allows it (unchanged, self-limiting via hitstun/combo
-// decay same as always - see COMBO_DAMAGE_DECAY above), but it can never
-// CANCEL into itself to skip that recovery, which is exactly what would
-// turn mashing into a free accelerating string.
+// everything" - that would just be the old bug with extra steps). Re-keyed
+// PER STATE (not per-family) now that punch is a real 3-hit chain - each
+// chain hit needs its own distinct outgoing route (punch1 only continues
+// into punch2, never back into punch1 or straight to punch3):
+//   punch1   -> punch2, uppercut   the chain's own next hit, or bail into
+//                                   the launcher
+//   punch2   -> punch3, uppercut   same idea, one hit deeper
+//   punch3   -> kick, uppercut     the chain's ender either flows into a
+//                                   kick (mixed-string variety) or the
+//                                   launcher, same as the old punch->kick
+//                                   route did
+//   kick     -> uppercut           kick, the HIGH starter, sets up the same
+//                                   anti-air-shaped launcher a punch can
+//   slide    -> uppercut           slide, the LOW starter, converges on the
+//                                   exact same launcher route kick does - see
+//                                   takeDamage's high/low guard mixup below
+//                                   for why these two are the deliberate
+//                                   high/low pair
+//   uppercut -> (nothing)          already this engine's biggest "ender"
+//                                   class hit (see isComboEnder above) - it's
+//                                   the string's natural stopping point for
+//                                   now, not a step to cancel out of
+// Notably absent: any state routing back into itself. Mashing one button can
+// still land two separate, real-gap-recovered pokes if the timing genuinely
+// allows it (unchanged, self-limiting via hitstun/combo decay same as always
+// - see COMBO_DAMAGE_DECAY above), but it can never CANCEL into itself to
+// skip that recovery, which is exactly what would turn mashing into a free
+// accelerating string.
 const CANCEL_ROUTES = {
-  punch: ["uppercut", "kick"],
+  punch1: ["punch2", "uppercut"],
+  punch2: ["punch3", "uppercut"],
+  punch3: ["kick", "uppercut"],
   kick: ["uppercut"],
   slide: ["uppercut"],
   uppercut: [],
 };
 
-// Which family a given fighter state belongs to for cancel purposes. Reuses
-// PUNCH_POSES/KICK_POSES wholesale (every pose variant in a family shares
-// its family's window below) rather than a new parallel list - the same
-// convention attackHitbox() below already uses to treat every punch pose as
-// interchangeable for hit-detection purposes.
-function moveFamily(state) {
-  if (PUNCH_POSES.includes(state)) return "punch";
-  if (KICK_POSES.includes(state)) return "kick";
-  if (state === "slide") return "slide";
-  if (state === "uppercut") return "uppercut";
-  return null;
-}
-
 // Frame range (inclusive, read against this.stateT the same way
-// activeStart/activeEnd are elsewhere in this file) each family's cancel
-// window opens during - always AFTER that family's own real activeEnd
-// (can't cancel a hit that's still live) and always the LATE portion of
-// what's left, not the instant recovery starts, per "late in its own
-// recovery" above. Derived directly off each move's own real duration
-// (PUNCH/KICK/SLIDE/UPPERCUT constants above) rather than invented numbers.
+// activeStart/activeEnd are elsewhere in this file) each STATE's cancel
+// window opens during - always AFTER that move's own real activeEnd (can't
+// cancel a hit that's still live) and always the LATE portion of what's
+// left, not the instant recovery starts, per "late in its own recovery"
+// above. Re-keyed per state (not per family) alongside CANCEL_ROUTES above -
+// each punch-chain hit has its own real duration now, so it needs its own
+// window rather than sharing one derived off a single PUNCH constant that no
+// longer exists. Derived directly off each move's own real duration
+// (PUNCH_CHAIN/KICK/SLIDE/UPPERCUT above) rather than invented numbers.
 const CANCEL_WINDOWS = {
+  // duration 18, activeEnd 11 -> 6 recovery frames (12-17). Window is the
+  // last 4.
+  punch1: { start: PUNCH_CHAIN[0].duration - 4, end: PUNCH_CHAIN[0].duration - 1 },
   // duration 22, activeEnd 14 -> 7 recovery frames (15-21). Window is the
-  // last 4 of those.
-  punch: { start: PUNCH.duration - 4, end: PUNCH.duration - 1 },
+  // last 4.
+  punch2: { start: PUNCH_CHAIN[1].duration - 4, end: PUNCH_CHAIN[1].duration - 1 },
+  // duration 24, activeEnd 16 -> 7 recovery frames (17-23). Window is the
+  // last 4.
+  punch3: { start: PUNCH_CHAIN[2].duration - 4, end: PUNCH_CHAIN[2].duration - 1 },
   // duration 34, activeEnd 22 -> 11 recovery frames (23-33). Window is the
   // last 5.
   kick: { start: KICK.duration - 5, end: KICK.duration - 1 },
@@ -583,7 +641,14 @@ const PASSIVE_REGEN_PER_FRAME = 0.03; // ~1.8/sec at 60fps
 // its gain is deliberately small so landing one still nets a real loss
 // (30 - 6 = 24 power gone) rather than paying for itself - it should stay a
 // deliberate, occasional tool, not something worth spamming even on a hit.
-const POWER_GAIN = { punch: 10, kick: 12, slide: 6, uppercut: 16, special: 0, airKick: 12 };
+// punch's gain trimmed 10 -> 8 now that it's a 3-hit chain (chains land more
+// hits per commitment than the old single poke did, so each one pays out a
+// little less). airPunch/punchDown/crouchPunch are new - punchDown pays the
+// most of the three since it's the resource-gated juggle finisher, and
+// crouchPunch (the free low poke) is currently unreachable via its own key
+// (crouchPunch hits resolve with kind "punch", see checkHit in game.js) but
+// kept here for whichever future call site ends up reading it directly.
+const POWER_GAIN = { punch: 8, kick: 12, slide: 6, uppercut: 16, special: 0, airKick: 12, airPunch: 10, punchDown: 14, crouchPunch: 8 };
 const BLOCK_POWER_GAIN = 8;
 
 // --- Perfect parry ---------------------------------------------------------
@@ -694,6 +759,19 @@ export class Fighter {
     // as chained is if this fighter is still genuinely stunned when it
     // lands, which state itself already guarantees.
     this.comboCount = 0;
+    // Punch chain bookkeeping - see PUNCH_CHAIN/enterPunchChain above/below.
+    // punchChainIndex is which hit of the grounded chain is either currently
+    // playing or was most recently completed; punchChainResetT is a real
+    // per-fighter countdown (this engine has no global frame counter -
+    // decremented once per real update() tick below) that gates whether the
+    // NEXT punch press continues the chain (still > 0) or restarts it fresh
+    // at jab (expired). airPunchChainIndex is the same idea for the aerial
+    // chain, but reset per-jump (see the airborne branch and jump-entry
+    // point below) rather than time-gated - a fresh jump always starts a
+    // fresh aerial chain.
+    this.punchChainIndex = 0;
+    this.punchChainResetT = 0;
+    this.airPunchChainIndex = 0;
     // Airborne juggle physics - see the "Airborne juggle" block above (near
     // UPPERCUT) for the full design. juggleY/juggleVY are only ever
     // meaningful while state === "juggled" (integrated once a real tick in
@@ -879,11 +957,12 @@ export class Fighter {
   }
 
   // opponent (optional - callers with no opponent concept, if any ever show
-  // up, still work fine) is ONLY used cosmetically, to pick which punch/kick/
-  // air-attack pose to display (see pickPunchState/pickKickState/
-  // pickAirAttackState below) - it never affects hit detection, damage, or
-  // state timing, all of which stay exactly the caller's own responsibility
-  // via attackHitbox()/checkHit (game.js) same as before.
+  // up, still work fine) is ONLY used cosmetically, to pick which kick/
+  // air-attack pose to display (see pickKickState/pickAirAttackState below -
+  // punch no longer needs a picker of its own now that it's a real 3-hit
+  // chain, see enterPunchChain above) - it never affects hit detection,
+  // damage, or state timing, all of which stay exactly the caller's own
+  // responsibility via attackHitbox()/checkHit (game.js) same as before.
   update(input, opponent) {
     this.lastEvent = null;
     this.lastComboEnder = false;
@@ -897,6 +976,12 @@ export class Fighter {
     }
 
     this.stateT++;
+    // Real per-tick countdown, not tied to any state's own stateT - see this
+    // field's own constructor comment. Ages down every real tick regardless
+    // of what state this fighter is in (including hitstun/knockback/etc, not
+    // just while mid-chain), same "measured against real elapsed frames"
+    // convention the input buffer (INPUT_BUFFER_FRAMES) already uses.
+    if (this.punchChainResetT > 0) this.punchChainResetT--;
 
     // Power slowly refills on its own except while kicking - jump is free
     // (it's the dodge tool, including for the ranged special, so it can't be
@@ -976,9 +1061,12 @@ export class Fighter {
     // hit detection for them, this just counts down back to idle. knockback
     // is never entered via input at all (see takeDamage), only ever reached
     // by getting hit by a slide.
-    if (["punch", "kick", "special", "specialHigh", "specialLow", "hitstun", "slide", "knockback", "uppercut", "dash"].includes(this.state)) {
+    if (["punch1", "punch2", "punch3", "crouchPunch", "kick", "special", "specialHigh", "specialLow", "hitstun", "slide", "knockback", "uppercut", "dash"].includes(this.state)) {
       const durations = {
-        punch: PUNCH.duration,
+        punch1: PUNCH_CHAIN[0].duration,
+        punch2: PUNCH_CHAIN[1].duration,
+        punch3: PUNCH_CHAIN[2].duration,
+        crouchPunch: CROUCH_PUNCH.duration,
         kick: KICK.duration,
         special: SPECIAL.duration,
         specialHigh: BUILDER_SPECIAL.duration,
@@ -1029,43 +1117,60 @@ export class Fighter {
         );
       }
       // Cancel check - see CANCEL_ROUTES/CANCEL_WINDOWS above for the full
-      // route graph and window math. moveFamily returns null for every
-      // state that flows through this same shared branch but isn't a
+      // route graph and window math. Keyed directly off this.state now (not
+      // a collapsed family) since each punch-chain hit needs its own
+      // distinct outgoing route. CANCEL_WINDOWS[this.state] is undefined for
+      // every state that flows through this same shared branch but isn't a
       // cancelable grounded attack (special/specialHigh/specialLow/hitstun/
       // knockback/dash) - this whole block is a no-op for those, same as it
       // always was before cancels existed.
-      const cancelFamily = moveFamily(this.state);
-      if (cancelFamily) {
-        const window = CANCEL_WINDOWS[cancelFamily];
-        if (this.stateT >= window.start && this.stateT <= window.end) {
-          // uppercut checked first when it's on this family's route list -
-          // same priority the neutral (non-attack) input branch below
-          // already gives it over kick, so a simultaneous press resolves
-          // identically whether or not a cancel window happens to be open.
-          // Not edge-triggered/buffered, same as every other uppercut check
-          // in this file (see INPUT_BUFFER_FRAMES above) - holding it is
-          // the real charge mechanic, so this cancels straight into
-          // "uppercut-charge" exactly like the neutral entry point does,
-          // not directly into "uppercut" itself.
-          if (CANCEL_ROUTES[cancelFamily].includes("uppercut") && input.uppercut && this.power >= UPPERCUT.cost) {
-            this.spendPower(UPPERCUT.cost);
-            this.setState("uppercut-charge");
-            return;
-          }
-          // kick is the only other cancel target this graph defines
-          // (punch's own route list). A disallowed target (kick pressed
-          // mid-kick, or any press at all outside the window above) just
-          // falls through to the plain duration check below instead,
-          // exactly like an unaffordable move does elsewhere in this file:
-          // the input isn't queued or retried forever, it's simply not
-          // honored this frame - the buffer (if anything's in it) just ages
-          // out on its own normal INPUT_BUFFER_FRAMES timer.
-          if (CANCEL_ROUTES[cancelFamily].includes("kick") && (justPressed.kick || this.hasBuffered("kick")) && this.power >= KICK.cost) {
-            this.consumeBuffered("kick");
-            this.spendPower(KICK.cost);
-            this.setState(this.pickKickState(opponent));
-            return;
-          }
+      const cancelWindow = CANCEL_WINDOWS[this.state];
+      if (cancelWindow && this.stateT >= cancelWindow.start && this.stateT <= cancelWindow.end) {
+        const routes = CANCEL_ROUTES[this.state] || [];
+        // uppercut checked first when it's on this state's route list - same
+        // priority the neutral (non-attack) input branch below already
+        // gives it over kick/punch, so a simultaneous press resolves
+        // identically whether or not a cancel window happens to be open.
+        // Not edge-triggered/buffered, same as every other uppercut check in
+        // this file (see INPUT_BUFFER_FRAMES above) - holding it is the real
+        // charge mechanic, so this cancels straight into "uppercut-charge"
+        // exactly like the neutral entry point does, not directly into
+        // "uppercut" itself.
+        if (routes.includes("uppercut") && input.uppercut && this.power >= UPPERCUT.cost) {
+          this.spendPower(UPPERCUT.cost);
+          this.setState("uppercut-charge");
+          return;
+        }
+        // kick - only punch3's own route list includes this (the chain
+        // ender flowing into a mixed punch->kick string). A disallowed
+        // target (kick pressed mid-punch1, or any press at all outside the
+        // window above) just falls through to the plain duration check
+        // below instead, exactly like an unaffordable move does elsewhere in
+        // this file: the input isn't queued or retried forever, it's simply
+        // not honored this frame - the buffer (if anything's in it) just
+        // ages out on its own normal INPUT_BUFFER_FRAMES timer.
+        if (routes.includes("kick") && (justPressed.kick || this.hasBuffered("kick")) && this.power >= KICK.cost) {
+          this.consumeBuffered("kick");
+          this.spendPower(KICK.cost);
+          this.setState(this.pickKickState(opponent));
+          return;
+        }
+        // Chain-continuation cancel - punch1 into punch2, punch2 into
+        // punch3. The route target is always "whatever the next chain entry
+        // actually is", so this reads it straight off PUNCH_CHAIN via the
+        // current index rather than a separate named target per hit; that
+        // next entry's own state name still has to appear in this state's
+        // route list (it always does today, but this keeps the route graph
+        // itself, not just this code, the source of truth). enterPunchChain
+        // is the SAME single entry point the neutral branch below and the
+        // buffered-press path both use - the index can never desync from the
+        // state no matter which of those three doors a chain hit comes
+        // through.
+        const nextPunch = PUNCH_CHAIN[this.punchChainIndex + 1];
+        if (nextPunch && routes.includes(nextPunch.state) && (justPressed.punch || this.hasBuffered("punch")) && this.power >= nextPunch.cost) {
+          this.consumeBuffered("punch");
+          this.enterPunchChain(this.punchChainIndex + 1);
+          return;
         }
       }
       if (this.stateT >= durations[this.state]) this.setState("idle");
@@ -1077,11 +1182,11 @@ export class Fighter {
     // durations-map branch - all three need airborneT's own real-flight-time
     // logic (see its constructor comment), not a fixed-duration lookup keyed
     // off stateT the way every grounded attack pose is.
-    if (this.state === "jump" || this.state === "airKick" || this.state === "flyingKick") {
-      // One tick of real airtime, regardless of which of the three states
-      // this is - a fighter thrusting into an air attack mid-jump hasn't
-      // touched the ground, so their total flight budget (JUMP_DURATION)
-      // keeps draining exactly like it would if they'd just kept falling.
+    if (this.state === "jump" || this.state === "airKick" || this.state === "flyingKick" || AIR_PUNCH_STATES.includes(this.state)) {
+      // One tick of real airtime, regardless of which of these states this
+      // is - a fighter thrusting into an air attack mid-jump hasn't touched
+      // the ground, so their total flight budget (JUMP_DURATION) keeps
+      // draining exactly like it would if they'd just kept falling.
       this.airborneT++;
 
       if (this.state === "jump") {
@@ -1105,14 +1210,36 @@ export class Fighter {
           this.lastEvent = "air-attack-start";
           return;
         }
+        // The aerial punch chain - mirrors the kick check just above
+        // exactly, but reads AIR_PUNCH_CHAIN[airPunchChainIndex] for which
+        // hit fires next (see that field's own constructor comment) instead
+        // of a single fixed move spec, so repeated punch presses this same
+        // airtime cycle airPunch1 -> airPunch2 -> airPunch3 -> punchDown
+        // (the finisher, only reachable once the first three have each been
+        // thrown - see the index clamp below). One aerial swing per airborne
+        // beat, same as kick just above - this only ever fires while
+        // this.state is plain "jump", never mid-swing.
+        if ((justPressed.punch || this.hasBuffered("punch")) && this.power >= AIR_PUNCH_CHAIN[this.airPunchChainIndex].cost) {
+          this.consumeBuffered("punch");
+          const move = AIR_PUNCH_CHAIN[this.airPunchChainIndex];
+          this.spendPower(move.cost);
+          this.setState(move.state);
+          // Clamped, not wrapped - once the chain has reached punchDown
+          // (index 3) this airtime, further punch presses just keep
+          // re-throwing punchDown (real power allowing) rather than looping
+          // back to airPunch1.
+          this.airPunchChainIndex = Math.min(this.airPunchChainIndex + 1, AIR_PUNCH_CHAIN.length - 1);
+          this.lastEvent = "air-attack-start";
+          return;
+        }
         // The homing aerial special - see AIR_SPECIAL's own comment above
         // for why this fires instantly (no pose change, no `return`-into-a-
-        // new-state) rather than following the kick branch's pattern just
-        // above. Deliberately falls through to the shared stillAirborne/
-        // landing logic right below instead of returning early - casting
-        // mid-flight must not skip the "did this jump's airtime just run
-        // out" check the same way throwing nothing at all wouldn't skip it
-        // either.
+        // new-state) rather than following the kick/punch branches' pattern
+        // just above. Deliberately falls through to the shared
+        // stillAirborne/landing logic right below instead of returning
+        // early - casting mid-flight must not skip the "did this jump's
+        // airtime just run out" check the same way throwing nothing at all
+        // wouldn't skip it either.
         if ((justPressed.special || this.hasBuffered("special")) && this.power >= AIR_SPECIAL.cost) {
           this.consumeBuffered("special");
           this.spendPower(AIR_SPECIAL.cost);
@@ -1128,19 +1255,27 @@ export class Fighter {
       // hold finishes.
       const stillAirborne = this.airborneT < JUMP_DURATION;
       if (this.state === "jump") {
-        if (!stillAirborne) this.setState("idle");
+        if (!stillAirborne) {
+          this.setState("idle");
+          // Landed - a fresh jump gets a fresh aerial chain (see
+          // airPunchChainIndex's own constructor comment); also reset at
+          // fresh-jump entry below, belt-and-suspenders.
+          this.airPunchChainIndex = 0;
+        }
         return;
       }
 
-      // airKick/flyingKick: held for the move's own fixed pose duration
-      // (AIR_ATTACK.duration) regardless of whether it actually connected -
-      // hasHit only ever gates a SECOND hit from the same active window (see
-      // attackHitbox's own equivalent gate for grounded punch/kick), never
-      // the pose's own timing, so a whiffed air attack recovers on exactly
-      // the same clock a landed one does and can never leave the attacker
-      // stuck mid-animation waiting on something that isn't coming.
-      if (this.stateT >= AIR_ATTACK.duration) {
+      // airKick/flyingKick/the air-punch chain: held for the move's own
+      // fixed pose duration (AIR_ATTACK_STATE_DURATIONS[this.state])
+      // regardless of whether it actually connected - hasHit only ever gates
+      // a SECOND hit from the same active window (see attackHitbox's own
+      // equivalent gate for grounded punch/kick), never the pose's own
+      // timing, so a whiffed air attack recovers on exactly the same clock a
+      // landed one does and can never leave the attacker stuck mid-animation
+      // waiting on something that isn't coming.
+      if (this.stateT >= (AIR_ATTACK_STATE_DURATIONS[this.state] ?? AIR_ATTACK.duration)) {
         this.setState(stillAirborne ? "jump" : "idle");
+        if (!stillAirborne) this.airPunchChainIndex = 0;
       }
       return;
     }
@@ -1221,6 +1356,13 @@ export class Fighter {
       // flight budget, not reset it back to a fresh full jump's worth of
       // airtime for free).
       this.airborneT = 0;
+      // A fresh jump always starts a fresh aerial punch chain - see
+      // airPunchChainIndex's own constructor comment. Already reset on the
+      // PREVIOUS jump's own landing (see the combined jump/air-attack
+      // branch above); reset again here too, belt-and-suspenders, so a
+      // stale index can never survive into a new jump no matter which path
+      // got this fighter back to "idle" in between.
+      this.airPunchChainIndex = 0;
       this.setState("jump");
       this.lastEvent = "jump-start";
       return;
@@ -1258,8 +1400,31 @@ export class Fighter {
       this.lastEvent = "slide-start";
       return;
     }
+    // Crouching punch - checked BEFORE the plain standing chain below, same
+    // input-priority pattern the crouching-guard branch above already uses
+    // (holding a modifier changes what a following press does). Free (no
+    // power cost, no special gate - see CROUCH_PUNCH above) and doesn't
+    // touch punchChainIndex/punchChainResetT at all, so ducking mid-standing-
+    // chain to throw one doesn't disturb the chain's own sequencing (the
+    // chain simply keeps whatever punchChainResetT window it already had
+    // running).
+    if (input.crouch && justPressed.punch) {
+      this.setState("crouchPunch");
+      return;
+    }
+    // Standing punch chain - see enterPunchChain/PUNCH_CHAIN/
+    // punchChainResetT above for the full design. A fresh press either
+    // continues the chain (still within its post-hit reset window AND not
+    // already at the ender) or restarts it fresh at jab - explicit restart
+    // rather than any wraparound, so "one press past the ender" always reads
+    // the same way regardless of exactly how much of the reset window was
+    // left.
     if (justPressed.punch || this.consumeBuffered("punch")) {
-      this.setState(this.pickPunchState(opponent));
+      if (this.punchChainResetT > 0 && this.punchChainIndex < PUNCH_CHAIN.length - 1) {
+        this.enterPunchChain(this.punchChainIndex + 1);
+      } else {
+        this.enterPunchChain(0);
+      }
       return;
     }
     if ((justPressed.kick || this.hasBuffered("kick")) && this.power >= KICK.cost) {
@@ -1288,20 +1453,32 @@ export class Fighter {
     return vx;
   }
 
-  // Which punch/kick pose to throw next. Upstream (the engine this was
-  // ported from) reads the OPPONENT's own comboCount here to cycle through
-  // several combo-string art variants - see PUNCH_POSES/KICK_POSES' own
-  // comment above for why that layer doesn't port to OnChainHoodies (no
-  // equivalent art). Both pickers just return the base pose here, every
-  // time. Kept as real methods (not inlined "punch"/"kick" string literals
-  // at each call site) rather than removed outright, since update()'s
-  // cancel-window branch above calls pickKickState the exact same way the
-  // neutral kick entry point does - a later art pass could reintroduce pose
-  // variety here without having to touch either call site.
-  pickPunchState(_opponent) {
-    return "punch";
+  // SINGLE SOURCE OF TRUTH for the standing punch chain - the neutral
+  // entry point, the buffered-press path, and the chain-cancel route in
+  // update()'s cancel-check block above all call this same method rather
+  // than each independently touching punchChainIndex/setState, so the index
+  // can never desync from the state no matter which of those three doors a
+  // chain hit comes through. punchChainResetT is set to this hit's own
+  // duration PLUS the reset grace window (CHAIN_RESET_FRAMES) - long enough
+  // that a press landing anywhere during this hit's own animation, plus a
+  // normal-speed follow-up after it ends, still reads as "continuing", but
+  // finite so a genuinely abandoned chain reliably expires back to jab.
+  enterPunchChain(idx) {
+    this.punchChainIndex = idx;
+    this.punchChainResetT = PUNCH_CHAIN[idx].duration + CHAIN_RESET_FRAMES;
+    this.setState(PUNCH_CHAIN[idx].state);
   }
 
+  // Which kick pose to throw next. Upstream (the engine this was ported
+  // from) reads the OPPONENT's own comboCount here to cycle through several
+  // combo-string art variants - see PUNCH_POSES/KICK_POSES' own comment
+  // above for why that layer doesn't port to OnChainHoodies (no equivalent
+  // art, at least not for kick yet - see PUNCH_CHAIN above for why punch
+  // itself no longer needs this kind of picker). Kept as a real method (not
+  // an inlined "kick" string literal at each call site) since update()'s
+  // cancel-window branch above calls this the exact same way the neutral
+  // kick entry point does - a later art pass could reintroduce pose variety
+  // here without having to touch either call site.
   pickKickState(_opponent) {
     return "kick";
   }
@@ -1362,21 +1539,25 @@ export class Fighter {
   // game.js, which handles its hit detection independently once the
   // projectile it fires is actually in flight.
   attackHitbox() {
-    // PUNCH_POSES/KICK_POSES.includes(...) rather than a literal "punch"/
-    // "kick" check - today those lists each have exactly one member, so this
-    // reads identically, but keeps this call site future-proof against a
-    // later art pass reintroducing pose variety the same way it stayed
-    // future-proof upstream.
-    const spec = PUNCH_POSES.includes(this.state) ? PUNCH : KICK_POSES.includes(this.state) ? KICK : null;
+    // PUNCH_CHAIN_BY_STATE covers punch1/punch2/punch3 (each with its own
+    // real damage/range/timing now, see PUNCH_CHAIN above); crouchPunch is
+    // checked alongside it (same "punch" kind - see checkHit in game.js, no
+    // separate kind string for it, per the "don't invent parallel kind
+    // strings" rule); KICK_POSES.includes(...) stays a real list rather than
+    // a literal "kick" check, future-proofing this call site the same way it
+    // always has, even though kick chaining itself is a later stage.
+    const punchSpec = PUNCH_CHAIN_BY_STATE[this.state];
+    const spec = punchSpec ? punchSpec : this.state === "crouchPunch" ? CROUCH_PUNCH : KICK_POSES.includes(this.state) ? KICK : null;
     if (!spec) return null;
     if (this.stateT < spec.activeStart || this.stateT > spec.activeEnd) return null;
     if (this.hasHit) return null;
+    const isPunch = !!punchSpec || this.state === "crouchPunch";
     return {
       from: this.x,
       to: this.x + this.facing * spec.range,
       damage: spec.damage * this.archetype.damageMult,
-      isPunch: spec === PUNCH,
-      kind: spec === PUNCH ? "punch" : "kick",
+      isPunch,
+      kind: isPunch ? "punch" : "kick",
     };
   }
 
