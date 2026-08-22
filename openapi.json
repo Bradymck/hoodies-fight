@@ -63,10 +63,10 @@
                       "type": "array",
                       "items": {
                         "type": "object",
+                        "description": "One entry per completed match (not per round/side) - winnerId/loserId is each either a real tokenId (only when that side's fighter was a wallet-verified owner, not a randomly-sampled opponent) or null.",
                         "properties": {
-                          "tokenId": { "type": "integer" },
-                          "opponentTokenId": { "type": ["integer", "null"] },
-                          "result": { "type": "string", "enum": ["win", "loss"] },
+                          "winnerId": { "type": ["integer", "null"] },
+                          "loserId": { "type": ["integer", "null"] },
                           "ts": { "type": "integer", "description": "Unix ms timestamp" }
                         }
                       }
@@ -162,19 +162,17 @@
     "/api/match-result": {
       "post": {
         "operationId": "postMatchResult",
-        "summary": "Record the outcome of a completed match for one Hoodie",
-        "description": "Called by the game client itself when a match ends. Unauthenticated - not designed to resist abuse, treat resulting stats as an ambient/fun signal rather than a verified record. When opponentTokenId is present this also updates that pairing's head-to-head record (see /api/rivalry/{tokenIdA}/{tokenIdB}), and a win also updates the leaderboard (see /api/leaderboard).",
+        "summary": "Record the outcome of one completed match",
+        "description": "Called by the game client itself once, when a whole match (not a single round) ends. Unauthenticated and not designed to resist abuse - the server trusts whatever the caller sends and does not itself verify wallet ownership, so treat resulting stats as an ambient/fun signal rather than a verified record. The game client only ever sends a non-null side when that side's fighter was wallet-verified in the UI (a randomly-sampled opponent never gets attributed a result), but nothing stops a direct API caller from sending any value in range. At least one of winnerId/loserId must be non-null. When both are present this also updates that pairing's head-to-head record (see /api/rivalry/{tokenIdA}/{tokenIdB}), and a non-null winnerId also updates the leaderboard (see /api/leaderboard). All writes for one call land atomically (or not at all) - there's no partial/torn write.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["tokenId", "result"],
                 "properties": {
-                  "tokenId": { "type": "integer", "minimum": 0, "maximum": 5999 },
-                  "opponentTokenId": { "type": ["integer", "null"], "minimum": 0, "maximum": 5999 },
-                  "result": { "type": "string", "enum": ["win", "loss"] }
+                  "winnerId": { "type": ["integer", "null"], "minimum": 0, "maximum": 5999 },
+                  "loserId": { "type": ["integer", "null"], "minimum": 0, "maximum": 5999 }
                 }
               }
             }
@@ -182,7 +180,8 @@
         },
         "responses": {
           "200": { "description": "Recorded" },
-          "400": { "description": "Invalid body" }
+          "400": { "description": "Invalid body" },
+          "502": { "description": "Could not record right now" }
         }
       }
     }

@@ -1,10 +1,10 @@
-import { loadFighterData, fetchWalletHoodies, fetchToken, fetchFighterStats } from "./api.js";
+import { loadFighterData, fetchWalletHoodies, fetchToken, fetchFighterStats, reportMatchResult } from "./api.js";
 import { Fighter, ARCHETYPES, RARE_TRAIT_HEALTH_BONUS } from "./fighter.js";
 import { createGame } from "./game.js";
 import { initSound, playSound, playRandomTrack, stopMusic } from "./sound.js";
 import { pickRandomArena, drawArena, drawFighter, drawFlash } from "./body.js";
 import { speakTaunt } from "./tts.js";
-import { connectWallet, hasInjectedWallet, getConnectedAccount, disconnectWallet } from "./wallet.js";
+import { connectWallet, hasInjectedWallet, getConnectedAccount, disconnectWallet, onAccountsChanged } from "./wallet.js";
 import { verifyOwnership } from "./chain.js";
 import { initBloodCode } from "./blood-code.js";
 import { initGamepadDebugOverlay } from "./gamepad.js";
@@ -105,6 +105,17 @@ controlsInfoBtn.addEventListener("click", () => {
 document.addEventListener("click", (e) => {
   if (!controlsPanel.classList.contains("open")) return;
   if (controlsPanel.contains(e.target) || e.target === controlsInfoBtn) return;
+  controlsPanel.classList.remove("open");
+});
+// Escape closes it too, same as click-outside above - only acts when this
+// panel is actually open, so an Escape press with nothing open (e.g. mid-
+// combat, no panel showing) does nothing here. The gamepad remap panel
+// (src/gamepad-nav.js) sits above this one (see currentScope()) and owns
+// its own separate Escape listener rather than this one reaching into it,
+// so one press never closes both layers at once.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!controlsPanel.classList.contains("open")) return;
   controlsPanel.classList.remove("open");
 });
 
@@ -244,6 +255,11 @@ if (hasInjectedWallet()) {
 
 const PANEL_PAGE_SIZE = 12;
 const RANDOM_POOL_SIZE = 48;
+// Same range as api/_lib/constants.js's MAX_TOKEN_ID - kept as its own copy
+// here rather than shared, since this file is ESM served straight to the
+// browser and api/_lib is CJS bundled per-route by Vercel; there's no build
+// step in this repo that could share one module across that boundary. If
+// OnChainHoodies' collection size ever changes, both copies need updating.
 const MAX_TOKEN_ID = 5999;
 const ARENA_BG_IMAGES = ["assets/backgrounds/arena-2.png", "assets/backgrounds/arena-3.png"];
 
@@ -293,9 +309,17 @@ function randomTokenPool(count) {
   return [...pool];
 }
 
+// walletVerified marks whether a panel's pool is real wallet-owned tokenIds
+// (true) or a randomTokenPool() sample (false) - see enterSelectScreen. Used
+// to gate match-result reporting: a result can only ever be attributed to a
+// tokenId that's actually verified as belonging to whoever's playing it,
+// never to a randomly-sampled NFT. Distinct from chain.js's verifyOwnership
+// (a post-match cosmetic on-chain check for the share-card flourish) - this
+// is "did this panel's pool come from a connected wallet in the first
+// place", decided once at select-screen setup, not a live chain read.
 const panelState = {
-  p1: { pool: [], page: 0, selectedId: null, selectedData: null },
-  p2: { pool: [], page: 0, selectedId: null, selectedData: null },
+  p1: { pool: [], page: 0, selectedId: null, selectedData: null, walletVerified: false },
+  p2: { pool: [], page: 0, selectedId: null, selectedData: null, walletVerified: false },
 };
 
 // Emoji + flavor text per archetype - the numbers (damage/speed/health/
@@ -428,6 +452,12 @@ async function selectFighter(side, tokenId, token) {
   for (const card of grid.querySelectorAll(".character-card")) {
     card.classList.toggle("selected", Number(card.dataset.tokenId) === tokenId);
   }
+  // Captured up front (same reasoning as the async guards below this point) -
+  // panelState[side] itself could in principle be replaced by a fresh
+  // enterSelectScreen() call before loadFighterData resolves, so read the
+  // panel's verified-ness now rather than through a possibly-stale
+  // panelState[side] reference after the await.
+  const walletVerified = panelState[side].walletVerified;
   panelState[side].selectedId = tokenId;
   const label = side === "p1" ? p1Label : p2Label;
   const type = token.traits?.hoodie ?? "Builder";
@@ -449,6 +479,18 @@ async function selectFighter(side, tokenId, token) {
 
   try {
     const data = await loadFighterData(tokenId);
+    // Guard against a faster later pick resolving before this one - without
+    // this, fast card-switching could leave selectedData (and the verified
+    // flag below, which now feeds match-result reporting) pointing at a
+    // token that isn't actually the highlighted/selected one.
+    if (panelState[side].selectedId !== tokenId) return;
+    // Rides along on the fighter data object itself (Fighter's constructor
+    // just does `this.data = data`, so `fighter.data.verified` is readable
+    // straight off p1/p2 in runMatch without threading a parallel side
+    // channel through Fighter/createGame). True only for a tokenId that
+    // actually came from a connected wallet's own pool - see panelState's
+    // walletVerified comment.
+    data.verified = walletVerified;
     panelState[side].selectedData = data;
     portraits[side].setHead(data.imageUrl);
     updateReadyState();
@@ -589,8 +631,13 @@ async function enterSelectScreen(walletTokenIds) {
     `url(${ARENA_BG_IMAGES[Math.floor(Math.random() * ARENA_BG_IMAGES.length)]})`,
   );
 
-  panelState.p1 = { pool: walletTokenIds?.length ? walletTokenIds : randomTokenPool(RANDOM_POOL_SIZE), page: 0, selectedId: null, selectedData: null };
-  panelState.p2 = { pool: randomTokenPool(RANDOM_POOL_SIZE), page: 0, selectedId: null, selectedData: null };
+  const p1FromWallet = Boolean(walletTokenIds?.length);
+  panelState.p1 = { pool: p1FromWallet ? walletTokenIds : randomTokenPool(RANDOM_POOL_SIZE), page: 0, selectedId: null, selectedData: null, walletVerified: p1FromWallet };
+  // P2 is always a random sample today (no second connected wallet - see
+  // this section's own top comment) so its walletVerified stays false;
+  // match-result reporting will simply never attribute a result to P2's
+  // token until a real second-wallet PvP pool exists for it.
+  panelState.p2 = { pool: randomTokenPool(RANDOM_POOL_SIZE), page: 0, selectedId: null, selectedData: null, walletVerified: false };
   p1Label.textContent = "CHOOSE YOUR FIGHTER";
   p2Label.textContent = "CHOOSE YOUR OPPONENT";
   updateReadyState();
@@ -721,6 +768,24 @@ async function tryResumeWalletSession() {
   await proceedWithWallet(address, { unlockSound: false });
 }
 
+// Fires on an EXTERNAL account switch/disconnect made in the wallet
+// extension's own UI - not this site's Disconnect button (disconnectBtn
+// above already reloads on that path). Only ever touches the always-visible
+// wallet chip; deliberately never interrupts a match already in progress
+// and never re-runs proceedWithWallet/enterSelectScreen mid-session. Also
+// deliberately does NOT touch panelState's walletVerified flags (see that
+// object's own comment) - those are captured once at select time, so a
+// wallet switch after a fighter is already picked must not retroactively
+// mark it verified/unverified.
+onAccountsChanged((accounts) => {
+  if (accounts?.length) {
+    showWalletChip(accounts[0]);
+  } else {
+    walletChip.classList.add("hidden");
+    connectWalletBtn.disabled = false;
+  }
+});
+
 const ROUNDS_TO_WIN = 2;
 // A drawn round (timeout tie or double-KO) replays instead of counting -
 // best-of-3 needs a decisive result each round to make progress. Repeated
@@ -815,6 +880,20 @@ async function runMatch(data1, data2, canvas, ctx, { p2AI = false, practiceMode 
     // flourish to "a real player won", not the AI. A future real PvP lobby
     // would need a genuine per-side "is this a human, and which wallet"
     // concept instead of this shortcut.
+
+    // Exactly one report per COMPLETED match (not per round - see game.js's
+    // endRound, which used to fire this itself, up to twice a round / 6
+    // times a best-of-3, and never on a draw). Each side's ID is only ever
+    // sent when that side's token is wallet-verified (see
+    // panelState/selectFighter's `verified` flag) - a randomly-sampled
+    // token (P2, always, today) never gets attributed a win or a loss. If
+    // NEITHER side is verified there's nothing truthful to report, so the
+    // call is skipped entirely rather than sent with both IDs null.
+    const winnerId = matchWinner.data.verified ? matchWinner.data.tokenId : null;
+    const loserId = matchLoser.data.verified ? matchLoser.data.tokenId : null;
+    if (winnerId !== null || loserId !== null) {
+      reportMatchResult(winnerId, loserId);
+    }
 
     return showMatchOverActions(p2AI, matchWinner, matchLoser, matchWinner === p1, canvas, ctx, wins);
   }

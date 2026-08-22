@@ -167,23 +167,46 @@ async function cropToHeadShape(svgDataUri) {
 }
 
 async function fetchTransparentHeadDataUri(svgUrl) {
-  const res = await fetch(svgUrl);
-  const svgText = await res.text();
+  // The on-chain fallback (chain.js) already hands us a data: URI with the
+  // SVG inline - no network round trip needed to "fetch" it, and a real
+  // fetch() of a data: URI is blocked by CSP's connect-src unless the data:
+  // scheme is explicitly allowed there, which would need to be true for
+  // every future connect-src edit too. Decoding it locally avoids that
+  // coupling entirely.
+  const svgText = svgUrl.startsWith("data:")
+    ? decodeDataUri(svgUrl)
+    : await (await fetch(svgUrl)).text();
   const transparent = stripSvgBackground(svgText);
   const svgDataUri = `data:image/svg+xml;base64,${btoa(transparent)}`;
   return cropToHeadShape(svgDataUri);
+}
+
+function decodeDataUri(dataUri) {
+  const commaIndex = dataUri.indexOf(",");
+  const meta = dataUri.slice(5, commaIndex);
+  const payload = dataUri.slice(commaIndex + 1);
+  return meta.includes(";base64") ? atob(payload) : decodeURIComponent(payload);
 }
 
 // Our own backend (api/match-result.js), not the OnChainHoodies API - hence
 // no BASE prefix. Fire-and-forget by design: the match result already
 // finished playing out client-side by the time this fires, so a slow or
 // failed request should never hold up or break the result screen. Same
-// fail-soft philosophy as fetchHoodTalk above.
-export function reportMatchResult(tokenId, opponentTokenId, result) {
+// fail-soft philosophy as fetchHoodTalk above. There's no retry on failure,
+// so the server never needs to de-duplicate this call - its atomic
+// multi-exec write batch is what actually prevents a torn/partial report,
+// not a matchId (there isn't one).
+//
+// One call per COMPLETED MATCH (not per round - see runMatch's own call
+// site in main.js for why). winnerId/loserId are each either the real
+// tokenId (only when that side came from a wallet-verified pool) or null
+// (a randomly-sampled token never gets attributed a result) - the caller is
+// responsible for skipping this call entirely when both would be null.
+export function reportMatchResult(winnerId, loserId) {
   fetch("/api/match-result", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tokenId, opponentTokenId, result }),
+    body: JSON.stringify({ winnerId, loserId }),
   }).catch(() => {});
 }
 
