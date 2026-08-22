@@ -1,9 +1,5 @@
 const { redisCommand } = require("../../_lib/redis");
-
-// Matches OnChainHoodies' own token ID range (0-5999, see their openapi.json)
-// - same duplicated constant every other route file here already keeps its
-// own copy of, no shared _lib module for it.
-const MAX_TOKEN_ID = 5999;
+const { MAX_TOKEN_ID } = require("../../_lib/constants");
 
 // Canonical lower/higher ordering so the same matchup always lands on the
 // same hash key regardless of which fighter was p1 vs p2 in a given match;

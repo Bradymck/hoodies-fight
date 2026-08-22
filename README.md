@@ -10,13 +10,13 @@ Play: [hoodvshood.lol](https://hoodvshood.lol)
 
 - **Free play**: pick any two Hoodie token IDs and fight the AI. No wallet needed.
 - **Wallet play**: connect a wallet, and if it holds any OnChainHoodies, pick one to fight as against the AI. Ownership is read directly from-chain (Robinhood Chain, contract `0x9ec6c5...735f45`) if the OnChainHoodies API is down, so wallet play still works either way.
-- Archetype (Builder/Flipper/Hodler/Collector) drives a fighter's stats *and* their special attack:
-  - **Builder** — hits harder, and their special is a big flying high kick.
+- Archetype (Builder/Flipper/Hodler/Collector) drives a fighter's stats *and* which ranged special they throw (all four archetypes cast the same special move, just with a different projectile):
+  - **Builder** — hits harder, and their special is the long-range bolt.
   - **Flipper** — moves faster, and their special is a Hood Rat Rush (a rat swarm charging along the ground).
-  - **Hodler** — more health, and their special is a low sweep kick that blocks incoming hits and stops an opponent's slide dead.
+  - **Hodler** — more health, and their special is a Hood Rat Rush too, same ground-level swarm as Flipper's.
   - **Collector** — blocks better, and their special is the long-range bolt.
   - Rare-tier traits add a small health bonus on top.
-- Punch is free and builds your power meter slowly; landing hits and successful blocks build it faster. Kick, slide, uppercut, and special all spend power or carry real risk on a whiff.
+- Light, Medium, and Heavy attacks (standing or crouching) are free and build your power meter slowly; landing hits and successful blocks build it faster. Special, slide, and uppercut all spend power and carry real risk on a whiff.
 - Jump high enough to cross over an opponent; slide low enough to pass under one who jumps. See the in-game controls legend for the full move list.
 
 ## Run it locally
@@ -72,7 +72,7 @@ The game keeps a lightweight, ambient win/loss record per Hoodie token ID - full
 - `GET /api/matches/recent?limit=25` - newest completed matches across all Hoodies
 - `GET /api/leaderboard?limit=10` - top Hoodies by win count
 - `GET /api/rivalry/{tokenIdA}/{tokenIdB}` - head-to-head win record between two Hoodies (order doesn't matter)
-- `POST /api/match-result` - called by the game client itself when a match ends; when `opponentTokenId` is present this also updates that pairing's rivalry record and, on a win, the leaderboard
+- `POST /api/match-result` - called by the game client itself once, when a whole match ends (not per round); when both `winnerId` and `loserId` are present this also updates that pairing's rivalry record and, on a win, the leaderboard
 
 Unauthenticated by design, same trust model as everything else here (no wallet writes, nothing on-chain) - treat it as a fun social signal, not a verified competitive record. Backed by a small Redis store (`api/_lib/redis.js` talks to it over plain REST - no npm client, same zero-dependency approach as the rest of the repo).
 

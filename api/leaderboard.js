@@ -1,9 +1,6 @@
 const { redisCommand } = require("./_lib/redis");
+const { MAX_TOKEN_ID } = require("./_lib/constants");
 
-// Matches OnChainHoodies' own token ID range (0-5999, see their openapi.json)
-// - same duplicated constant every other route file here already keeps its
-// own copy of, no shared _lib module for it.
-const MAX_TOKEN_ID = 5999;
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
 // leaderboard:wins is a sorted set (score = win count, member = tokenId),

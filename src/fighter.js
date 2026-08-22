@@ -68,10 +68,11 @@ export const HEAVY_ATTACK = { state: "punch3", duration: 24, activeStart: 7, act
 // jump/air-attack branch of update() below), replacing the old same-button
 // airPunch1->airPunch2->airPunch3 cycle the exact same way the grounded
 // rework replaced PUNCH_CHAIN. airPunch2 (the old cycle's middle hit) is
-// gone as an AERIAL pose - its own sheet (punchCross) is reused by the new
-// CROUCH_HEAVY below instead, same "an old chain-middle-hit's sheet gets
-// repurposed once nothing enters that hit anymore" precedent PUNCH_POSES'
-// own comment already sets for grounded punch2. Costs zeroed (were 8/8) -
+// gone - nothing enters it anymore now that AIR_LIGHT/AIR_HEAVY are
+// direct-entry moves, not a chain, so its own ANIMS entry (and the
+// old grounded punch2's) has since been removed from body.js entirely -
+// same reference-sweep verdict PUNCH_POSES' own comment already documents
+// for grounded punch2. Costs zeroed (were 8/8) -
 // same reasoning MEDIUM_ATTACK's comment gives for the grounded kick: an
 // ordinary poke, grounded or airborne, shouldn't drain the meter just to
 // throw it, only getting BLOCKED should cost the attacker anything (see
@@ -834,8 +835,9 @@ const CANCEL_WINDOWS = {
 
 // Archetype specials rework (stage 3, requirement 6) - Builder/Hodler no
 // longer get their own dedicated melee states (specialHigh/specialLow are
-// GONE as move states; body.js keeps the two SHEETS themselves since kick3/
-// crouchKick already repurposed them wholesale in stage 2). ALL FOUR
+// GONE as move states; body.js keeps the two SHEETS themselves - specialLow
+// is still claimed by crouchKick, specialHigh's own former claimant, the
+// kick chain's dead-code "kick3" ender, has since been removed too). ALL FOUR
 // archetypes now enter the exact same shared ranged "special" cast pose
 // (see the special branch of update() below) - the only real archetype
 // split left is which of this engine's two existing PROJECTILES spawns off

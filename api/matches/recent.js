@@ -1,5 +1,12 @@
 const { redisCommand } = require("../_lib/redis");
 
+// Entries in matches:recent are match-level now (one LPUSH per completed
+// match from match-result.js: {winnerId, loserId, ts}, either ID possibly
+// null for a one-side-verified match), not the old per-round/per-side shape
+// ({tokenId, opponentTokenId, result, ts}, up to 6 pushed per best-of-3).
+// This handler just parses and forwards whatever's stored, so it needed no
+// change for that - but any consumer of this endpoint needs to read the new
+// field names.
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   const limitRaw = Number(req.query.limit);

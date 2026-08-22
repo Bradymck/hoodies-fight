@@ -38,7 +38,7 @@ const TRIGGER_THRESHOLD = 0.5;
 // already wired up below, is the guard trigger now). light/medium/heavy
 // (the generic Light/Medium/Heavy attack ladder replacing the old punch/kick
 // chains) take its place in this list instead.
-export const REMAPPABLE_ACTIONS = ["jump", "uppercut", "light", "medium", "heavy", "slide", "special", "dashForward", "dashBack"];
+export const REMAPPABLE_ACTIONS = ["jump", "uppercut", "light", "medium", "heavy", "slide", "special", "specialAlt", "dashForward", "dashBack"];
 
 // Bumpers relocated to make room for the two dash buttons (stage 4): the
 // only genuinely free index left on a standard pad is 11 (R Stick Click - 16
@@ -46,7 +46,7 @@ export const REMAPPABLE_ACTIONS = ["jump", "uppercut", "light", "medium", "heavy
 // moves there and special takes over L Stick Click (freed now that dash no
 // longer lives there), leaving LB/RB free for dashBack/dashForward - bumpers
 // are the natural physical slot for a two-way dash the same way they were
-// for the old single dash. SPECIAL_ALT_BUTTON (RT, below) still works as a
+// for the old single dash. specialAlt (RT, below) still works as a
 // second special trigger regardless, and is now the more ergonomic one to
 // actually hold for the ground finisher's arm-window chord (see JUGGLE_
 // FINISHER in fighter.js) - a stick click is awkward to hold through a
@@ -71,17 +71,35 @@ const DEFAULT_GAMEPAD_MAP = {
   medium: 3, // Y / Triangle
   slide: 11, // R Stick Click
   special: 10, // L Stick Click
+  // RT - a real remappable entry now (was a hardcoded SPECIAL_ALT_BUTTON
+  // constant OR'd straight into buildGamepadInput's special check below,
+  // bypassing remaps entirely - a player who rebound another action onto RT
+  // got both that action AND special firing together). Seeded to button 7
+  // so existing muscle memory - RT as a convenience second special trigger,
+  // naturally paired with RB - still works out of the box, but now goes
+  // through the same map/remap/isPressed path as every other action, and
+  // shows up in the remap UI like one.
+  specialAlt: 7, // RT
   dashBack: 4, // LB / L1
   dashForward: 5, // RB / R1
 };
 
-// RT (button 7) always works as an alternate special trigger regardless of
-// the configured map - not offered as its own remappable action (special
-// already has one), just a convenience second input since RB/RT are
-// naturally paired on every pad.
-const SPECIAL_ALT_BUTTON = 7;
-
 const STORAGE_KEY = "pfpbrawl-gamepad-map";
+
+// Select/Start are wired to fixed system-level actions in gamepad-nav.js
+// (Select = exit-match/reload during live combat, Start = toggle the
+// controls panel) - completely outside REMAPPABLE_ACTIONS, so nothing in
+// this file's own remap flow ever offers them, but nothing enforced that
+// externally either: setGamepadAction/waitForButtonPress had zero exclusion
+// of their own, so a player free-binding an action (in whatever future UI,
+// or a saved map hand-edited in localStorage) onto button 8 or 9 would get
+// silently thrown into live combat or have the panel pop open mid-match the
+// next time they pressed it. Exported as the single source of truth -
+// gamepad-nav.js imports SELECT_BUTTON/START_BUTTON from here instead of
+// keeping its own separate copies of the same two indexes.
+export const SELECT_BUTTON = 8;
+export const START_BUTTON = 9;
+export const RESERVED_BUTTONS = new Set([SELECT_BUTTON, START_BUTTON]);
 
 // W3C Standard Gamepad button-index names, for the controls-panel display
 // and the remap UI's "press a button" prompt - covers every index a real
@@ -141,6 +159,15 @@ export function getGamepadMap() {
 }
 
 export function setGamepadAction(action, buttonIndex) {
+  // Defense-in-depth alongside waitForButtonPress's own reserved-button
+  // skip below - that's what actually stops a live remap capture from ever
+  // producing a reserved index in normal play, but this guard means this
+  // function can never bind Select/Start onto a gameplay action no matter
+  // what calls it with, now or later.
+  if (RESERVED_BUTTONS.has(buttonIndex)) {
+    console.warn(`[gamepad] refused to bind "${action}" to reserved button ${buttonIndex} (Select/Start)`);
+    return;
+  }
   gamepadMap = { ...gamepadMap, [action]: buttonIndex };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(gamepadMap));
 }
@@ -228,7 +255,7 @@ export function buildGamepadInput(gp) {
   input.medium = isPressed(gp, map.medium);
   input.heavy = isPressed(gp, map.heavy);
   input.slide = isPressed(gp, map.slide);
-  input.special = isPressed(gp, map.special) || isPressed(gp, SPECIAL_ALT_BUTTON);
+  input.special = isPressed(gp, map.special) || isPressed(gp, map.specialAlt);
   input.dashForward = isPressed(gp, map.dashForward);
   input.dashBack = isPressed(gp, map.dashBack);
 
@@ -286,8 +313,35 @@ export function initGamepadDebugOverlay() {
 // rather than a gamepadconnected-style event, since there's no
 // "buttondown" event in this API at all - per-frame snapshots are the only
 // way to detect a press.
-export function waitForButtonPress(timeoutMs = 8000) {
+//
+// A press of a RESERVED_BUTTONS index (Select/Start) never resolves the
+// capture - those two are permanently wired to system-level actions
+// (exit-match, controls-panel toggle - see gamepad-nav.js), so binding a
+// gameplay action onto either would mean pressing it later either fires
+// that action AND reloads the match / pops the panel open, or the remap
+// silently swallows the system action's own button. The prompt just keeps
+// waiting instead, same as if nothing had been pressed at all; the optional
+// onReservedPress callback lets the caller (the remap UI) show a brief
+// "reserved" state so the press doesn't look ignored.
+
+// Set while a waitForButtonPress() promise is in flight, cleared once it
+// settles - lets cancelButtonWait() (below) resolve whichever capture is
+// currently pending from outside this module, e.g. gamepad-nav.js's Escape
+// handler backing out of an in-progress rebind without needing its own
+// separate press-driven cancel path.
+let pendingCancel = null;
+
+export function waitForButtonPress(timeoutMs = 8000, { onReservedPress } = {}) {
   return new Promise((resolve) => {
+    let settled = false;
+    function settle(value) {
+      if (settled) return;
+      settled = true;
+      pendingCancel = null;
+      resolve(value);
+    }
+    pendingCancel = () => settle(null);
+
     const startedAt = performance.now();
     // Buttons already held down when the prompt opens shouldn't immediately
     // resolve it - a player holding a bumper while navigating into the
@@ -303,8 +357,9 @@ export function waitForButtonPress(timeoutMs = 8000) {
     }
 
     function tick() {
+      if (settled) return;
       if (performance.now() - startedAt > timeoutMs) {
-        resolve(null);
+        settle(null);
         return;
       }
       const pads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -314,7 +369,16 @@ export function waitForButtonPress(timeoutMs = 8000) {
           const key = `${gp.index}:${i}`;
           if (isPressed(gp, i)) {
             if (!alreadyHeld.has(key)) {
-              resolve(i);
+              if (RESERVED_BUTTONS.has(i)) {
+                // Mark held so this doesn't fire onReservedPress every
+                // single frame the player keeps it pressed - only once per
+                // press, same release-then-press bookkeeping every other
+                // button already gets below.
+                alreadyHeld.add(key);
+                onReservedPress?.(i);
+                continue;
+              }
+              settle(i);
               return;
             }
           } else {
@@ -326,4 +390,12 @@ export function waitForButtonPress(timeoutMs = 8000) {
     }
     requestAnimationFrame(tick);
   });
+}
+
+// Backs an in-progress waitForButtonPress() out early with a null result -
+// same outcome as the timeout branch above, just triggered by a keyboard
+// Escape (see gamepad-nav.js's rebindInProgress guard) instead of the clock.
+// A no-op if nothing is currently waiting.
+export function cancelButtonWait() {
+  pendingCancel?.();
 }

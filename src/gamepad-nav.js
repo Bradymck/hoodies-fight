@@ -18,12 +18,27 @@
 // matching how most games keep menu confirm/cancel fixed even with
 // rebindable gameplay controls.
 
-import { findGamepad, isPressed, getGamepadMap, setGamepadAction, resetGamepadMap, buttonName, waitForButtonPress, REMAPPABLE_ACTIONS } from "./gamepad.js";
+import {
+  findGamepad,
+  isPressed,
+  getGamepadMap,
+  setGamepadAction,
+  resetGamepadMap,
+  buttonName,
+  waitForButtonPress,
+  cancelButtonWait,
+  REMAPPABLE_ACTIONS,
+  SELECT_BUTTON,
+  START_BUTTON,
+} from "./gamepad.js";
 
 const CONFIRM_BUTTON = 0; // A / Cross
 const BACK_BUTTON = 1; // B / Circle
-const START_BUTTON = 9;
-const SELECT_BUTTON = 8;
+// SELECT_BUTTON/START_BUTTON imported from gamepad.js, not redeclared here -
+// that file also exports RESERVED_BUTTONS (the same two indexes) so the
+// remap capture flow can refuse them; keeping a second local copy of the
+// raw numbers here was the thing that let them drift apart in the first
+// place.
 
 const DIRECTION_REPEAT_DELAY_MS = 350; // how long a held direction waits before auto-repeating
 const DIRECTION_REPEAT_INTERVAL_MS = 130; // repeat rate once it starts
@@ -163,7 +178,18 @@ function renderRemapList() {
       rebindInProgress = true;
       btn.classList.add("waiting");
       btn.textContent = "Press a button…";
-      const pressedIndex = await waitForButtonPress();
+      const pressedIndex = await waitForButtonPress(8000, {
+        // Select/Start never resolve the capture (see waitForButtonPress in
+        // gamepad.js) - this just gives the player visible feedback that
+        // their press registered instead of the prompt looking stuck, then
+        // reverts back to the normal waiting prompt so they can try again.
+        onReservedPress: () => {
+          btn.textContent = "Reserved - try another";
+          setTimeout(() => {
+            if (rebindInProgress) btn.textContent = "Press a button…";
+          }, 900);
+        },
+      });
       rebindInProgress = false;
       btn.classList.remove("waiting");
       if (pressedIndex !== null) {
@@ -193,6 +219,27 @@ function initRemapUI() {
     resetGamepadMap();
     renderGamepadKeyList();
     renderRemapList();
+  });
+
+  // Escape is this panel's own close key, separate from #controls-panel's
+  // click-outside/Escape handling in main.js - the remap panel sits ABOVE
+  // the controls panel (see currentScope()), so only acts when it's
+  // actually visible, meaning one Escape press never closes both layers at
+  // once. While a rebind capture is actively waiting (rebindInProgress -
+  // same guard the main gamepad-nav tick loop above already uses to keep a
+  // pending press from double-firing as a menu action), Escape cancels the
+  // capture instead of closing the panel out from under it -
+  // cancelButtonWait() resolves the pending waitForButtonPress() with null,
+  // and the existing pressedIndex === null branch in the click handler
+  // above already restores the button's label via renderRemapList().
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (rebindInProgress) {
+      cancelButtonWait();
+      return;
+    }
+    if (isHiddenScreen(remapPanel)) return;
+    remapPanel.classList.add("hidden");
   });
 
   renderGamepadKeyList();

@@ -1,6 +1,5 @@
 const { redisCommand } = require("../../_lib/redis");
-
-const MAX_TOKEN_ID = 5999;
+const { MAX_TOKEN_ID } = require("../../_lib/constants");
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");

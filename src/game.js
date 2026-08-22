@@ -44,7 +44,6 @@ import { playSound } from "./sound.js";
 import { createAIController } from "./ai.js";
 import { speakTaunt } from "./tts.js";
 import { isBloodUnlocked } from "./blood-code.js";
-import { reportMatchResult } from "./api.js";
 import { findGamepad, buildGamepadInput } from "./gamepad.js";
 
 // dash split into dashForward/dashBack (stage 4, requirement 11) - two
@@ -911,7 +910,13 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         // blocked hit" - slide/uppercut/special/finisher keep their own
         // existing upfront-cost model untouched.
         attacker.power = Math.max(0, attacker.power - BLOCKED_PUNCH_KICK_POWER_LOSS);
-        attacker.lastEvent = `${box.kind}-hit`;
+        // Deliberately NOT `${box.kind}-hit` - that string is also what the
+        // landed branch below sets, and handleSounds maps it to the punch/
+        // kick impact clip. A blocked swing didn't land, so the attacker
+        // shouldn't get that impact cue on top of the defender's own
+        // "block-taken" block sound - "-blocked" has no handleSounds case,
+        // so this stays silent on the attacker's side.
+        attacker.lastEvent = `${box.kind}-blocked`;
       } else {
         attacker.onLandedHit(box.kind);
         // box.kind, not attacker.state - kept as box.kind (rather than the
@@ -1197,7 +1202,12 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
       // punchDown (the finisher) is deliberately excluded, same reasoning as
       // AIR_FINISHER's own cost staying non-zero in fighter.js.
       attacker.power = Math.max(0, attacker.power - BLOCKED_PUNCH_KICK_POWER_LOSS);
-      attacker.lastEvent = "air-punch-hit";
+      // Same collision as checkHit's block-taken branch above - "air-punch-hit"
+      // is also the landed branch's own lastEvent below, which handleSounds
+      // maps to the punch impact clip. Use a distinct, unmapped value so a
+      // blocked air punch stays silent on the attacker's side (defender
+      // already plays "block-taken"'s block sound).
+      attacker.lastEvent = "air-punch-blocked";
     } else {
       attacker.onLandedHit(kind);
       attacker.lastEvent = kind === "punchDown" ? "punch-down-hit" : "air-punch-hit";
@@ -1672,9 +1682,13 @@ export function createGame({ ctx, canvas, p1, p2, onEnd, timeLimit = 60, p2AI = 
         bubbleEl.classList.remove("hidden");
       }
       speakTaunt(quote);
-      const loser = winner === p1 ? p2 : p1;
-      reportMatchResult(winner.data.tokenId, loser.data.tokenId, "win");
-      reportMatchResult(loser.data.tokenId, winner.data.tokenId, "loss");
+      // Match-result reporting no longer happens per-round here - a
+      // best-of-3 fires this twice per round (up to 6 POSTs for one match,
+      // draws sent nothing), and neither side of a round is necessarily the
+      // wallet-verified owner of their token. The single, once-per-match,
+      // verified-gated report now fires from main.js's runMatch() once the
+      // whole match (not just this round) is decided - see the
+      // reportMatchResult call next to its matchWinner computation.
     } else {
       titleEl.textContent = "DRAW";
     }

@@ -39,6 +39,7 @@ const HOLD_BACK_POSES = [
   CROUCH_HEAVY.state,
   AIR_LIGHT.state,
   AIR_HEAVY.state,
+  AIR_FINISHER.state,
   ...AIR_KICK_POSES,
 ];
 
@@ -163,7 +164,13 @@ export function createAIController(self, opponent) {
     // crack at it - high odds (close to the only sane response), wide
     // window (it closes distance instead of staying in place), scaled off a
     // high floor (0.5) instead of straight multiplying difficulty so even
-    // at DIFFICULTY_MIN this is a ~68% dodge instead of ~25%.
+    // at DIFFICULTY_MIN this is a ~68% per-think-tick roll instead of ~25%.
+    // That's the odds IF this check runs, not the real-world dodge rate -
+    // decide() (and this check with it) only fires on think ticks (see
+    // getInput's frame >= thinkAt gate below, paced by THINK_INTERVAL_MIN/MAX
+    // over difficulty), so how often this branch even gets evaluated while
+    // a slide is active depends on think-tick cadence vs. the slide's own
+    // active window, not just this roll alone.
     if (opponent.state === "slide" && dist < SLIDE_REACT_RANGE) {
       if (Math.random() < 0.5 + 0.5 * difficulty) {
         input.jump = true;
@@ -318,18 +325,37 @@ export function createAIController(self, opponent) {
     }
 
     if (dist > ENGAGE_RANGE) {
-      // Special is a thrown projectile now, not a melee move - it's just as
-      // usable from across the arena as it is up close, so take the shot
-      // instead of always closing distance first.
-      if (self.power >= 50 && Math.random() < 0.25 * difficulty) {
+      // Shared-roll ladder, same convention as the ATTACK_RANGE/potshot
+      // ladders below (one roll, ascending cumulative thresholds) instead of
+      // this branch's old independent-roll-per-check style. Bands:
+      // special [0, 0.25d), slide [0.25d, 0.40d). Special is a thrown
+      // projectile now, not a melee move - it's just as usable from across
+      // the arena as it is up close, so take the shot instead of always
+      // closing distance first, at its original 0.25d odds. Slide covers
+      // ground fast - a real alternative to walking in from a distance, not
+      // just a close-range finisher - and keeps its original 0.15d BAND
+      // WIDTH (0.40d - 0.25d), matching its old odds when special had
+      // already failed; the old code rolled slide's 0.15d independently
+      // (so its true unconditional odds were (1 - 0.25d) * 0.15d, slightly
+      // lower), but a same-size band on the shared roll is the closest
+      // match to that intent under this file's established ladder
+      // convention, and costs real power, so check for it first - otherwise
+      // the AI "chooses" slide and just does nothing that frame once it
+      // can't afford it.
+      //
+      // Slide's band is bounded on BOTH sides (roll >= 0.25d, not just
+      // roll < 0.4d): when power is in [SLIDE.cost, 50) the AI can afford
+      // slide but not special, so the special check above never runs for
+      // this roll at all - without the lower bound, slide would then also
+      // catch every roll in special's [0, 0.25d) band, firing at ~0.4d odds
+      // instead of its intended ~0.15d band width whenever the AI is
+      // mid-power (a common state during a real match).
+      const roll = Math.random();
+      if (self.power >= 50 && roll < 0.25 * difficulty) {
         input.special = true;
         return;
       }
-      // Slide covers ground fast - a real alternative to walking in from a
-      // distance, not just a close-range finisher. Costs real power now, so
-      // check for it first - otherwise the AI "chooses" slide and just does
-      // nothing that frame once it can't afford it.
-      if (self.power >= SLIDE.cost && Math.random() < 0.15 * difficulty) {
+      if (self.power >= SLIDE.cost && roll >= 0.25 * difficulty && roll < 0.4 * difficulty) {
         input.slide = true;
         return;
       }
@@ -377,7 +403,11 @@ export function createAIController(self, opponent) {
       }
       if (self.power >= 50 && roll < 0.2) {
         input.special = true;
-      } else if (self.power >= 20 && roll < 0.4) {
+      } else if (roll < 0.4) {
+        // Medium - also free, same as Light/Heavy (MEDIUM_ATTACK.cost is 0,
+        // fighter.js) - the `self.power >= 20` gate here was stale from
+        // before Medium's cost was zeroed out and no longer reflects a real
+        // resource requirement.
         input.medium = true;
       } else if (roll < 0.55) {
         // Heavy - free, same as Light, no power gate needed. Was entirely
