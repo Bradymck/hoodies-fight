@@ -66,11 +66,6 @@ const SHEETS = {
   idle: { img: loadImg("assets/sprites/idle.png"), frameSize: 78 },
   walk: { img: loadImg("assets/sprites/walk.png"), frameSize: 86 },
   kick: { img: loadImg("assets/sprites/kick.png"), frameSize: 86 },
-  // The kick chain's 2nd hit (fighter.js's "kick2" state, KICK_CHAIN) - a
-  // dedicated high-kick sheet. The chain's 3rd hit (kick3) doesn't need a
-  // sheet of its own here - it reuses specialHigh below wholesale (see
-  // ANIMS.kick3's own comment).
-  highKick: { img: loadImg("assets/sprites/high-kick.png"), frameSize: 86 },
   // The 3-hit punch chain's own dedicated sheets (fighter.js's punch1/
   // punch2/punch3 states) - the old single "attack" sheet is gone, replaced
   // by real per-hit art. elbow doubles as the aerial chain's OPENER
@@ -99,10 +94,11 @@ const SHEETS = {
   flex: { img: loadImg("assets/sprites/flex.png"), frameSize: 78 },
   // Formerly Builder/Hodler's own dedicated melee-special sheets - both
   // archetypes now share the plain ranged-cast "spellcast" pose instead (see
-  // fighter.js's stage-3 archetype-specials rework). Kept here wholesale,
-  // not deleted - the kick chain's own ender (kick3) and the free crouch
-  // kick (crouchKick) already repurposed these two sheets as real move art
-  // of their own back in stage 2 (see ANIMS.kick3/ANIMS.crouchKick below).
+  // fighter.js's stage-3 archetype-specials rework). specialLow is still
+  // live art: the free crouch kick (ANIMS.crouchKick below) repurposed it
+  // back in stage 2. specialHigh's own former reuse (the old kick chain's
+  // ender, "kick3") was dead code and has since been removed - kept here
+  // anyway rather than deleted, per the reference sweep that flagged it.
   specialHigh: { img: loadImg("assets/sprites/special-high.png"), frameSize: 78 },
   specialLow: { img: loadImg("assets/sprites/special-low.png"), frameSize: 68 },
   // Optional victory-showcase-only pose (stage 5, requirement 5) - a relaxed
@@ -125,11 +121,6 @@ const HEAD_ANCHORS = {
   idle: [{"x":37.8,"y":-7},{"x":37.8,"y":-7},{"x":37.8,"y":-7},{"x":38.3,"y":-7},{"x":38.8,"y":-7},{"x":38.8,"y":-7},{"x":38.5,"y":-7},{"x":37.8,"y":-7}],
   walk: [{"x":40.9,"y":6},{"x":42.5,"y":5},{"x":41.4,"y":4},{"x":42.1,"y":3},{"x":40.5,"y":5},{"x":40.9,"y":6},{"x":42.2,"y":4},{"x":41.8,"y":3}],
   kick: [{"x":42.0,"y":2},{"x":41.1,"y":3},{"x":39.8,"y":3},{"x":33.8,"y":3},{"x":43.5,"y":1},{"x":40.7,"y":-2},{"x":45.7,"y":5},{"x":42.3,"y":2}],
-  // kick2 - new 8-frame high-kick sheet, seeded from kick's own anchor
-  // points above (same rough head-follows-strike shape a kick always had),
-  // same first-pass-placeholder treatment the new punch sheets below got in
-  // stage 1 - not hand-tuned per sheet yet.
-  kick2: [{"x":42.0,"y":2},{"x":41.1,"y":3},{"x":39.8,"y":3},{"x":33.8,"y":3},{"x":43.5,"y":1},{"x":40.7,"y":-2},{"x":45.7,"y":5},{"x":42.3,"y":2}],
   // New 8-frame punch-chain sheets - seeded from the old "attack" sheet's
   // own anchor points (same rough head-follows-swing shape a punch always
   // had) rather than a flat/centered guess, since the new art shares the
@@ -195,17 +186,15 @@ const HEAD_ANCHORS = {
   // the neck in every frame) instead of raw silhouette height.
   death: [{"x":11.6,"y":10.9},{"x":10.6,"y":12.9},{"x":7.3,"y":24.3},{"x":8.3,"y":33.4},{"x":8.4,"y":38.6},{"x":9.0,"y":40.0},{"x":8.8,"y":42.4},{"x":8.5,"y":43.0}],
 };
-// kick3 reuses specialHigh's own sheet wholesale (see ANIMS.kick3 above) -
-// same frames, so its head anchors are copied verbatim (a live reference,
-// not a duplicated second copy of the same 15-point array that could drift
-// out of sync with it) rather than re-sampled.
-HEAD_ANCHORS.kick3 = HEAD_ANCHORS.specialHigh;
-// crouchKick reuses specialLow's own sheet the same way.
+// crouchKick reuses specialLow's own sheet wholesale (see ANIMS.crouchKick
+// above) - same frames, so its head anchors are copied verbatim (a live
+// reference, not a duplicated second copy of the same array that could
+// drift out of sync with it) rather than re-sampled.
 HEAD_ANCHORS.crouchKick = HEAD_ANCHORS.specialLow;
 // Ground finisher (requirement 9) - reached via the Heavy+Special hold
 // macro, always finisherPunch now (see fighter.js's finisher-macro branch of
 // update()), which reuses punchDown's own sheet wholesale (see
-// ANIMS.finisherPunch above) - same live-reference copy pattern as kick3/
+// ANIMS.finisherPunch above) - same live-reference copy pattern as
 // crouchKick just above, not a re-sample. finisherKick (the old alternate
 // pose, reachable back when the arm-window let Light vs Medium pick between
 // two cosmetic finisher poses) is gone along with that chord - single
@@ -239,23 +228,15 @@ const ANIMS = {
   // `duration` exactly, same convention every other move's ANIMS entry here
   // already follows.
   punch1: { sheet: "punchJab", frames: 8, durationFrames: 18, loop: false },
-  punch2: { sheet: "punchCross", frames: 8, durationFrames: 22, loop: false },
   punch3: { sheet: "elbow", frames: 8, durationFrames: 24, loop: false },
   kick: { sheet: "kick", frames: 8, durationFrames: 34, loop: false },
-  // The 3-hit standing kick chain's own remaining two hits (fighter.js's
-  // KICK_CHAIN) - kick2 gets a dedicated new sheet (highKick), kick3 reuses
-  // Builder's old specialHigh sheet wholesale as the chain's flourish ender
-  // (see checkHit's own kick3-specific FX branch in game.js) rather than
-  // needing new art of its own - a real 15-frame animation "for free".
-  // durationFrames match each KICK_CHAIN entry's own `duration`.
-  kick2: { sheet: "highKick", frames: 8, durationFrames: 26, loop: false },
-  kick3: { sheet: "specialHigh", frames: 15, durationFrames: 34, loop: false },
   // Free, always-available crouch kick (fighter.js's CROUCH_MEDIUM) - reuses
   // Hodler's old specialLow sheet wholesale, same "borrow an existing sheet
-  // for a new state" move kick3 above makes. durationFrames matches
-  // CROUCH_MEDIUM.duration, not the old HODLER_SPECIAL.duration it happens to
-  // share a value with today - see CROUCH_MEDIUM's own comment in fighter.js
-  // for why these are deliberately separate numbers, not a shared reference.
+  // for a new state" move this file's other reused-sheet entries make.
+  // durationFrames matches CROUCH_MEDIUM.duration, not the old
+  // HODLER_SPECIAL.duration it happens to share a value with today - see
+  // CROUCH_MEDIUM's own comment in fighter.js for why these are deliberately
+  // separate numbers, not a shared reference.
   crouchKick: { sheet: "specialLow", frames: 7, durationFrames: 28, loop: false },
   // durationFrames (30) matches SPECIAL.release in fighter.js exactly, so
   // the cast finishes on the sheet's last (fullest-charge) frame right as
@@ -293,10 +274,11 @@ const ANIMS = {
   // Builder/Hodler's own dedicated "specialHigh"/"specialLow" MOVE STATES are
   // gone (stage 3, requirement 6 - see fighter.js's own archetype-specials
   // rework comment) - every archetype now shares the plain "special" ranged-
-  // cast pose above instead. The two SHEETS themselves stay in SHEETS above
-  // wholesale (kick3/crouchKick, stage 2, already repurposed them as real
-  // move art of their own - see those two ANIMS entries above), just with no
-  // ANIMS entry of their own left pointing a STATE at them anymore.
+  // cast pose above instead. The two SHEETS themselves stay in SHEETS above:
+  // specialLow is still claimed by crouchKick's own ANIMS entry above,
+  // specialHigh has no ANIMS entry pointing a STATE at it anymore now that
+  // kick3 (the old kick chain's dead-code ender that used to reuse it) has
+  // been removed.
   //
   // Ground finisher (requirement 9) - a "get over here" gap-close + slam
   // move, only reachable via the Heavy+Special hold macro while an opponent
@@ -337,15 +319,9 @@ const ANIMS = {
   // cross sheet, and punchDown (AIR_FINISHER, reused below for the free
   // crouch punch too) is the one genuinely full-cycle overhead-slam pose,
   // not a held single frame the way airKick/flyingKick above still are.
-  // airPunch2's own sheet (punchJab) is now orphaned as an AERIAL pose - it
-  // was only ever the old airPunch1->2->3 chain's middle hit, and nothing
-  // enters "airPunch2" anymore now that AIR_LIGHT/AIR_HEAVY are direct-entry
-  // moves, not a chain (same "an old chain-middle-hit's sheet sits unused
-  // once nothing throws it" situation grounded punch2 is already in - see
-  // that ANIMS entry's own comment above). durationFrames match each of
-  // AIR_LIGHT/AIR_HEAVY/AIR_FINISHER's own `duration`.
+  // durationFrames match each of AIR_LIGHT/AIR_HEAVY/AIR_FINISHER's own
+  // `duration`.
   airPunch1: { sheet: "elbow", frames: 8, durationFrames: 16, loop: false },
-  airPunch2: { sheet: "punchJab", frames: 8, durationFrames: 16, loop: false },
   airPunch3: { sheet: "punchCross", frames: 8, durationFrames: 16, loop: false },
   punchDown: { sheet: "punchDown", frames: 8, durationFrames: 20, loop: false },
   // Free crouching punch (fighter.js's CROUCH_LIGHT) - dual-uses the exact
