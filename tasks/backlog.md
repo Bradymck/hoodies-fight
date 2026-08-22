@@ -24,7 +24,7 @@ Source: a full 7-dimension site audit (combat engine, AI, input, frontend, backe
 - Cancellation via the deploy `concurrency` guard can't recall a `vercel deploy --prod` that Vercel already accepted mid-cancel — consider a `vercel promote`/alias-pin step keyed to `github.sha` for a harder guarantee, if this class of race ever actually bites in practice.
 - Stale `block: false` field still carried in `Fighter.prevInput` (`src/fighter.js`) — left in place; it turned out to still be load-bearing (edge-triggers the juggle burst-escape via `justPressed.block`), not actually dead.
 
-## Fixed (this pass — uncommitted, verified live before commit)
+## Fixed (shipped and live — PR #2, merged as `6dfa665`)
 
 **Match-result protocol** — full rewrite, not a patch (two prior patch attempts were blocked by adversarial review for real regressions):
 - Client now reports exactly once per **completed match** (not per round) — `src/game.js`'s old two-POST-per-round calls are gone; `src/main.js`'s `runMatch()` fires a single `reportMatchResult(winnerId, loserId)` when the match ends.
@@ -54,7 +54,7 @@ Source: a full 7-dimension site audit (combat engine, AI, input, frontend, backe
 - Dead CSS selectors removed (`#character-grid`, `.select-title`, `#free-play-btn`, `#setup-status`). `.grid-loading`/`.grid-loading p` deliberately left — still created dynamically via `grid.innerHTML`.
 - `src/wallet.js`'s `onAccountsChanged` wired up — wallet chip now updates on account switch, hides on disconnect, never interrupts a match in progress or retroactively changes an in-flight fighter's `verified` flag.
 
-**Not yet done:** none of the above is committed yet — still sitting uncommitted in the working tree on `fix/8-bug-fixes-batch`, next step is to split into logical commits (Pixelpushin identity) and open a PR.
+Deployed and confirmed live (`version.json` on prod matches `6dfa665`). `scripts/reset-corrupt-stats.js --confirm` has been run against production: wiped 6 `rivalry:*`, 35 `hoodie:*:wins`, 34 `hoodie:*:losses` keys (77 total). Post-wipe sanity check confirmed `/api/leaderboard` and `/api/matches/recent` respond cleanly with empty state.
 
 ## Already fixed in the prior session pass (for reference)
 
